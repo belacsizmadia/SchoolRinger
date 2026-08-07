@@ -22,6 +22,7 @@ from pychromecast.const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP
 import schoolringer
 
 
+BASE_DIR = Path(__file__).resolve().parent
 WEEKDAYS = (
     (0, "H", "Hétfő", "mon"),
     (1, "K", "Kedd", "tue"),
@@ -570,8 +571,10 @@ def create_app(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SchoolRinger konfigurációs felület")
     parser.add_argument("--group", default="", help="Kezdeti speaker group neve")
-    parser.add_argument("--media-dir", type=Path, default=Path("media"))
-    parser.add_argument("--config", type=Path, default=Path("data/schedules.json"))
+    parser.add_argument("--media-dir", type=Path, default=BASE_DIR / "media")
+    parser.add_argument(
+        "--config", type=Path, default=BASE_DIR / "data" / "schedules.json"
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--cast-host-ip", help="A hangszórók által elérhető LAN IP")
@@ -589,6 +592,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         cast_media_port=args.cast_media_port,
     )
     print(f"SchoolRinger: http://{args.host}:{args.port}")
+    print(f"Média könyvtár: {args.media_dir.resolve()}")
+    print(f"Konfiguráció: {args.config.resolve()}")
     app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
     return 0
 

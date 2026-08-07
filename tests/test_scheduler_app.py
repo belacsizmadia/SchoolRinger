@@ -55,6 +55,13 @@ class SchedulerApiTests(unittest.TestCase):
         self.app.extensions["schoolringer"]["service"].shutdown()
         self.temporary.cleanup()
 
+    def test_default_paths_are_anchored_to_project(self):
+        args = scheduler_app.parse_args([])
+        self.assertEqual(args.media_dir, scheduler_app.BASE_DIR / "media")
+        self.assertEqual(
+            args.config, scheduler_app.BASE_DIR / "data" / "schedules.json"
+        )
+
     def test_index_and_initial_state(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)

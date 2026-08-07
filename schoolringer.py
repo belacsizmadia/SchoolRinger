@@ -19,6 +19,9 @@ from pychromecast.const import CAST_TYPE_GROUP
 from pychromecast.controllers.media import MEDIA_PLAYER_ERROR_CODES
 
 
+BASE_DIR = Path(__file__).resolve().parent
+
+
 class MediaHTTPServer(http.server.ThreadingHTTPServer):
     """HTTP server carrying the single file and request diagnostics."""
 
@@ -136,7 +139,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Helyi MP3 lejátszása Google Home speaker groupon."
     )
-    parser.add_argument("--file", type=Path, default=Path("media/teszt.mp3"))
+    parser.add_argument("--file", type=Path, default=BASE_DIR / "media" / "teszt.mp3")
     parser.add_argument("--group", help="A Google Home speaker group pontos neve")
     parser.add_argument("--host-ip", help="A hangszórók által elérhető helyi IP-cím")
     parser.add_argument("--port", type=int, default=0, help="HTTP port (0: automatikus)")
