@@ -402,22 +402,33 @@ def create_app(
         casts: list[Any] = []
         browser = None
         try:
-            timeout = min(max(float(request.args.get("timeout", 8)), 2), 20)
+            timeout = min(max(float(request.args.get("timeout", 15)), 2), 30)
             casts, browser = schoolringer.discover_casts(timeout)
             found = []
             device_cache.clear()
             for cast in casts:
-                if cast.cast_type not in {CAST_TYPE_AUDIO, CAST_TYPE_GROUP}:
-                    continue
+                if cast.cast_type == CAST_TYPE_GROUP:
+                    target_type = "group"
+                elif cast.cast_type == CAST_TYPE_AUDIO:
+                    target_type = "speaker"
+                else:
+                    target_type = "cast"
                 target = {
                     "id": str(cast.uuid),
                     "name": cast.name or "Névtelen Cast eszköz",
-                    "type": "group" if cast.cast_type == CAST_TYPE_GROUP else "speaker",
+                    "type": target_type,
                     "model": cast.model_name,
                     "host": cast.cast_info.host,
                 }
                 device_cache[target["id"]] = target
                 found.append(target)
+            print(
+                "Felderített Cast eszközök: "
+                + (
+                    ", ".join(f"{item['name']} ({item['type']})" for item in found)
+                    or "nincs"
+                )
+            )
             return jsonify(found)
         except (
             OSError,

@@ -140,7 +140,11 @@ class SchedulerApiTests(unittest.TestCase):
 
         self.assertEqual(
             [(item["name"], item["type"]) for item in devices],
-            [("Iskola", "group"), ("Tanterem", "speaker")],
+            [
+                ("Iskola", "group"),
+                ("Tanterem", "speaker"),
+                ("Kijelző", "cast"),
+            ],
         )
         response = self.client.put("/api/target", json={"id": "speaker-id"})
         self.assertEqual(response.status_code, 200)

@@ -181,18 +181,22 @@ async function discoverDevices() {
   elements.target.disabled = true;
   elements.target.replaceChildren(new Option("Eszközök keresése...", ""));
   try {
-    const devices = await api("/api/devices?timeout=8");
+    const devices = await api("/api/devices?timeout=15");
     elements.target.replaceChildren();
     if (!devices.length) {
       elements.target.add(new Option("Nincs elérhető eszköz", ""));
       showToast("Nem található Cast hangszóró vagy speaker group.");
       return;
     }
-    for (const type of ["group", "speaker"]) {
+    for (const type of ["group", "speaker", "cast"]) {
       const matching = devices.filter((device) => device.type === type);
       if (!matching.length) continue;
       const optionGroup = document.createElement("optgroup");
-      optionGroup.label = type === "group" ? "Speaker groupok" : "Hangszórók";
+      optionGroup.label = {
+        group: "Speaker groupok",
+        speaker: "Hangszórók",
+        cast: "Egyéb Cast eszközök",
+      }[type];
       for (const device of matching) {
         const option = new Option(device.name, device.id);
         option.title = `${device.model} · ${device.host}`;
