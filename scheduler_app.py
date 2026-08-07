@@ -17,6 +17,7 @@ from uuid import uuid4
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, jsonify, render_template, request
+from pychromecast.const import CAST_TYPE_AUDIO, CAST_TYPE_GROUP
 
 import schoolringer
 
@@ -142,6 +143,40 @@ class ScheduleStore:
             self.save(remaining)
 
 
+class SettingsStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._lock = threading.Lock()
+
+    def load(self, fallback_name: str = "") -> dict[str, str | None]:
+        with self._lock:
+            if not self.path.exists():
+                return {
+                    "id": None,
+                    "name": fallback_name or None,
+                    "type": "group" if fallback_name else None,
+                }
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as error:
+                raise RuntimeError(f"A célbeállítás nem olvasható: {error}") from error
+            return {
+                "id": data.get("id"),
+                "name": data.get("name"),
+                "type": data.get("type"),
+            }
+
+    def save(self, target: dict[str, str]) -> None:
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps(target, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(self.path)
+
+
 class ActivityLog:
     def __init__(self) -> None:
         self._items: deque[dict[str, str]] = deque(maxlen=30)
@@ -179,6 +214,17 @@ class CastRunner:
         self.host_ip = host_ip
         self.media_port = media_port
         self._play_lock = threading.Lock()
+        self._target_lock = threading.Lock()
+        self._target_id: str | None = None
+
+    def set_target(self, target_id: str | None, target_name: str | None) -> None:
+        with self._target_lock:
+            self._target_id = target_id
+            self.group_name = target_name or ""
+
+    def target(self) -> tuple[str | None, str]:
+        with self._target_lock:
+            return self._target_id, self.group_name
 
     def play_schedule(self, schedule_id: str) -> None:
         schedule = self.store.find(schedule_id)
@@ -196,11 +242,20 @@ class CastRunner:
         groups: list[Any] = []
         self.activity.add("running", f"Indítás: {track}")
         try:
+            target_id, target_name = self.target()
+            if not target_id and not target_name:
+                raise RuntimeError("Nincs kiválasztva céleszköz.")
             media_path = self.store.media_dir / track
             if not media_path.is_file():
                 raise RuntimeError(f"Hiányzó MP3: {track}")
-            groups, browser = schoolringer.discover_groups(self.discovery_timeout)
-            group = schoolringer.choose_group(groups, self.group_name)
+            groups, browser = schoolringer.discover_casts(self.discovery_timeout)
+            if target_id:
+                matches = [cast for cast in groups if str(cast.uuid) == target_id]
+            else:
+                matches = [cast for cast in groups if cast.name == target_name]
+            if not matches:
+                raise RuntimeError(f"A céleszköz nem található: {target_name}")
+            group = matches[0]
             schoolringer.play(
                 group,
                 media_path,
@@ -279,6 +334,7 @@ def create_app(
     media_dir: Path,
     config_path: Path,
     group_name: str,
+    settings_path: Path | None = None,
     start_scheduler: bool = True,
     cast_host_ip: str | None = None,
     cast_media_port: int = 0,
@@ -287,6 +343,10 @@ def create_app(
 ) -> Flask:
     app = Flask(__name__)
     store = ScheduleStore(config_path.resolve(), media_dir.resolve())
+    settings = SettingsStore(
+        (settings_path or config_path.parent / "settings.json").resolve()
+    )
+    selected_target = settings.load(group_name)
     activity = ActivityLog()
     if runner_factory:
         runner = runner_factory(group_name, store, activity)
@@ -298,9 +358,13 @@ def create_app(
             host_ip=cast_host_ip,
             media_port=cast_media_port,
         )
+    if hasattr(runner, "set_target"):
+        runner.set_target(selected_target["id"], selected_target["name"])
     service = ScheduleService(store, runner, start_scheduler=start_scheduler)
+    device_cache: dict[str, dict[str, str]] = {}
     app.extensions["schoolringer"] = {
         "store": store,
+        "settings": settings,
         "activity": activity,
         "runner": runner,
         "service": service,
@@ -320,7 +384,8 @@ def create_app(
             schedule["next_run"] = next_runs.get(schedule["id"])
         return jsonify(
             {
-                "group": group_name,
+                "group": selected_target["name"],
+                "target": selected_target,
                 "timezone": str(service.scheduler.timezone),
                 "tracks": store.tracks(),
                 "weekdays": [
@@ -331,6 +396,55 @@ def create_app(
                 "activity": activity.items(),
             }
         )
+
+    @app.get("/api/devices")
+    def devices() -> Any:
+        casts: list[Any] = []
+        browser = None
+        try:
+            timeout = min(max(float(request.args.get("timeout", 8)), 2), 20)
+            casts, browser = schoolringer.discover_casts(timeout)
+            found = []
+            device_cache.clear()
+            for cast in casts:
+                if cast.cast_type not in {CAST_TYPE_AUDIO, CAST_TYPE_GROUP}:
+                    continue
+                target = {
+                    "id": str(cast.uuid),
+                    "name": cast.name or "Névtelen Cast eszköz",
+                    "type": "group" if cast.cast_type == CAST_TYPE_GROUP else "speaker",
+                    "model": cast.model_name,
+                    "host": cast.cast_info.host,
+                }
+                device_cache[target["id"]] = target
+                found.append(target)
+            return jsonify(found)
+        except (OSError, schoolringer.pychromecast.error.PyChromecastError) as error:
+            return jsonify({"error": f"Az eszközfelderítés sikertelen: {error}"}), 503
+        finally:
+            for cast in casts:
+                cast.disconnect(timeout=2)
+            if browser is not None:
+                schoolringer.pychromecast.discovery.stop_discovery(browser)
+
+    @app.put("/api/target")
+    def update_target() -> Any:
+        nonlocal selected_target
+        payload = request.get_json(silent=True)
+        target_id = payload.get("id") if isinstance(payload, dict) else None
+        if not isinstance(target_id, str) or target_id not in device_cache:
+            return jsonify({"error": "Válassz egy felderített céleszközt."}), 400
+        target = device_cache[target_id]
+        selected_target = {
+            "id": target["id"],
+            "name": target["name"],
+            "type": target["type"],
+        }
+        settings.save(selected_target)
+        if hasattr(runner, "set_target"):
+            runner.set_target(selected_target["id"], selected_target["name"])
+        activity.add("success", f"Céleszköz kiválasztva: {selected_target['name']}")
+        return jsonify(selected_target)
 
     @app.post("/api/schedules")
     def create_schedule() -> Any:
@@ -375,7 +489,7 @@ def create_app(
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SchoolRinger konfigurációs felület")
-    parser.add_argument("--group", required=True, help="A speaker group pontos neve")
+    parser.add_argument("--group", default="", help="Kezdeti speaker group neve")
     parser.add_argument("--media-dir", type=Path, default=Path("media"))
     parser.add_argument("--config", type=Path, default=Path("data/schedules.json"))
     parser.add_argument("--host", default="127.0.0.1")

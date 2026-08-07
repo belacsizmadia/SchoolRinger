@@ -31,22 +31,23 @@ következő frissítésekor automatikusan megjelennek a választóban.
 
 ```bash
 source .venv/bin/activate
-python scheduler_app.py --group "Iskola"
+python scheduler_app.py
 ```
 
 Nyisd meg a böngészőben: [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-A felületből létrehozható, szerkeszthető, kapcsolható és törölhető minden heti
-időzítés. A **Próba** művelet azonnal elindítja a kiválasztott MP3-at. A mentett
-beállítások a `data/schedules.json` fájlba kerülnek. Az időzítő csak addig fut,
-amíg a `scheduler_app.py` folyamat fut.
+A fejlécben az automatikusan felderített speaker groupok és önálló Cast
+hangszórók közül választható céleszköz. A felületből létrehozható, szerkeszthető,
+kapcsolható és törölhető minden heti időzítés. A **Próba** művelet azonnal
+elindítja a kiválasztott MP3-at. A mentett időzítések a `data/schedules.json`, a
+kiválasztott céleszköz pedig a `data/settings.json` fájlba kerül. Az időzítő csak
+addig fut, amíg a `scheduler_app.py` folyamat fut.
 
 Ha a gépnek több hálózati interfésze van, add meg a hangszórók által elérhető
 LAN IP-címet és egy fix média portot:
 
 ```bash
 python scheduler_app.py \
-  --group "Iskola" \
   --cast-host-ip 192.168.1.20 \
   --cast-media-port 8080
 ```

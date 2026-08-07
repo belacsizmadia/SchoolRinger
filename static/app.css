@@ -38,7 +38,7 @@ button { letter-spacing: 0; }
   border-bottom: 3px solid var(--yellow);
 }
 
-.brand-block, .target, .page-heading, .section-bar, .dialog-header,
+.brand-block, .target-control, .page-heading, .section-bar, .dialog-header,
 .dialog-actions, .toggle-row, .row-actions {
   display: flex;
   align-items: center;
@@ -46,8 +46,32 @@ button { letter-spacing: 0; }
 
 .brand-block { gap: 11px; font-size: 17px; }
 .brand-mark { width: 12px; height: 24px; background: var(--accent); }
-.target { gap: 8px; color: #e7e9e7; font-size: 14px; }
+.target-control { gap: 8px; color: #e7e9e7; font-size: 14px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #54c899; }
+.target-select {
+  width: min(310px, 38vw);
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid #59605b;
+  border-radius: 5px;
+  color: #fff;
+  background: #303531;
+  font-size: 13px;
+}
+.target-select:focus { outline: 2px solid rgba(84, 200, 153, 0.45); border-color: #78d7b0; }
+.target-select:disabled { color: #c4c9c5; }
+.target-refresh {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  color: #78d7b0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 19px;
+}
+.target-refresh:hover { background: #3a403b; }
+.target-refresh:disabled { opacity: 0.45; cursor: wait; }
 
 .page { max-width: 1240px; margin: 0 auto; padding: 36px 28px 60px; }
 .page-heading { justify-content: space-between; gap: 24px; margin-bottom: 24px; }
@@ -232,7 +256,7 @@ fieldset { margin: 22px 0; padding: 0; border: 0; }
   box-shadow: var(--shadow);
   font-size: 13px;
 }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
@@ -245,6 +269,8 @@ fieldset { margin: 22px 0; padding: 0; border: 0; }
   .page-heading { align-items: flex-start; }
   h1 { font-size: 25px; }
   .button.primary { white-space: nowrap; }
+  .target-select { width: 132px; }
+  .status-dot { display: none; }
   dialog form { padding: 19px; }
   .form-grid { grid-template-columns: 1fr; }
   .weekday-picker { grid-template-columns: repeat(4, 1fr); }

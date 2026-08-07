@@ -12,9 +12,13 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <strong>SchoolRinger</strong>
       </div>
-      <div class="target" title="Cél hangszórócsoport">
+      <div class="target-control">
         <span class="status-dot" aria-hidden="true"></span>
-        <span id="group-name">Betöltés...</span>
+        <label class="sr-only" for="target-select">Céleszköz</label>
+        <select class="target-select" id="target-select" title="Céleszköz">
+          <option value="">Eszközök keresése...</option>
+        </select>
+        <button class="target-refresh" id="discover-devices" type="button" title="Eszközök újrakeresése" aria-label="Eszközök újrakeresése">↻</button>
       </div>
     </header>
 

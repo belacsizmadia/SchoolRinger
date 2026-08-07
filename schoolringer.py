@@ -145,14 +145,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def discover_groups(timeout: float) -> tuple[list[Any], Any]:
+def discover_casts(timeout: float) -> tuple[list[Any], Any]:
     devices, browser = pychromecast.discovery.discover_chromecasts(timeout=timeout)
     casts = [
         pychromecast.get_chromecast_from_cast_info(device, browser.zc)
         for device in devices
     ]
+    return sorted(casts, key=lambda cast: (cast.name or "").casefold()), browser
+
+
+def discover_groups(timeout: float) -> tuple[list[Any], Any]:
+    casts, browser = discover_casts(timeout)
     groups = [cast for cast in casts if cast.cast_type == CAST_TYPE_GROUP]
-    return sorted(groups, key=lambda cast: (cast.name or "").casefold()), browser
+    return groups, browser
 
 
 def choose_group(groups: Sequence[Any], requested_name: str | None) -> Any:

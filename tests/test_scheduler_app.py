@@ -1,6 +1,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import scheduler_app
 
@@ -11,6 +13,10 @@ class FakeRunner:
         self.store = store
         self.activity = activity
         self.played = []
+        self.target = (None, group_name)
+
+    def set_target(self, target_id, target_name):
+        self.target = (target_id, target_name)
 
     def play_schedule(self, schedule_id):
         self.played.append(schedule_id)
@@ -104,6 +110,46 @@ class SchedulerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         runner = self.app.extensions["schoolringer"]["runner"]
         self.assertEqual(runner.played, ["becsengetes.mp3"])
+
+    @patch("scheduler_app.schoolringer.pychromecast.discovery.stop_discovery")
+    @patch("scheduler_app.schoolringer.discover_casts")
+    def test_discovers_and_persists_selected_target(self, discover, stop_discovery):
+        def cast(uuid, name, cast_type, model):
+            return SimpleNamespace(
+                uuid=uuid,
+                name=name,
+                cast_type=cast_type,
+                model_name=model,
+                cast_info=SimpleNamespace(host="192.168.1.10"),
+                disconnect=lambda timeout: None,
+            )
+
+        browser = SimpleNamespace()
+        discover.return_value = (
+            [
+                cast("group-id", "Iskola", "group", "Google Cast Group"),
+                cast("speaker-id", "Tanterem", "audio", "Nest Audio"),
+                cast("screen-id", "Kijelző", "cast", "Nest Hub"),
+            ],
+            browser,
+        )
+
+        devices = self.client.get("/api/devices?timeout=3").get_json()
+
+        self.assertEqual(
+            [(item["name"], item["type"]) for item in devices],
+            [("Iskola", "group"), ("Tanterem", "speaker")],
+        )
+        response = self.client.put("/api/target", json={"id": "speaker-id"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["name"], "Tanterem")
+        self.assertEqual(
+            self.client.get("/api/state").get_json()["target"]["id"],
+            "speaker-id",
+        )
+        runner = self.app.extensions["schoolringer"]["runner"]
+        self.assertEqual(runner.target, ("speaker-id", "Tanterem"))
+        stop_discovery.assert_called_once_with(browser)
 
 
 if __name__ == "__main__":

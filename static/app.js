@@ -8,7 +8,8 @@ const elements = {
   list: document.querySelector("#schedule-list"),
   empty: document.querySelector("#empty-state"),
   summary: document.querySelector("#schedule-summary"),
-  group: document.querySelector("#group-name"),
+  target: document.querySelector("#target-select"),
+  discover: document.querySelector("#discover-devices"),
   timezone: document.querySelector("#timezone"),
   activity: document.querySelector("#activity-list"),
   activityEmpty: document.querySelector("#activity-empty"),
@@ -164,13 +165,74 @@ async function loadState() {
   try {
     const data = await api("/api/state");
     Object.assign(state, data);
-    elements.group.textContent = data.group;
+    state.target = data.target;
     elements.timezone.textContent = data.timezone;
-    renderFormOptions();
+    if (!elements.dialog.open) renderFormOptions();
     renderSchedules();
     renderActivity(data.activity);
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+async function discoverDevices() {
+  const selectedId = state.target?.id || "";
+  elements.discover.disabled = true;
+  elements.target.disabled = true;
+  elements.target.replaceChildren(new Option("Eszközök keresése...", ""));
+  try {
+    const devices = await api("/api/devices?timeout=8");
+    elements.target.replaceChildren();
+    if (!devices.length) {
+      elements.target.add(new Option("Nincs elérhető eszköz", ""));
+      showToast("Nem található Cast hangszóró vagy speaker group.");
+      return;
+    }
+    for (const type of ["group", "speaker"]) {
+      const matching = devices.filter((device) => device.type === type);
+      if (!matching.length) continue;
+      const optionGroup = document.createElement("optgroup");
+      optionGroup.label = type === "group" ? "Speaker groupok" : "Hangszórók";
+      for (const device of matching) {
+        const option = new Option(device.name, device.id);
+        option.title = `${device.model} · ${device.host}`;
+        optionGroup.append(option);
+      }
+      elements.target.append(optionGroup);
+    }
+    const matchingCurrent = devices.find((device) => device.name === state.target?.name);
+    elements.target.value = selectedId || matchingCurrent?.id || "";
+    if (!elements.target.value) {
+      const placeholder = new Option("Válassz céleszközt", "", true, true);
+      placeholder.disabled = true;
+      elements.target.prepend(placeholder);
+    }
+  } catch (error) {
+    elements.target.replaceChildren(
+      new Option(state.target?.name || "Felderítési hiba", selectedId),
+    );
+    showToast(error.message);
+  } finally {
+    elements.discover.disabled = false;
+    elements.target.disabled = false;
+  }
+}
+
+async function selectTarget() {
+  if (!elements.target.value) return;
+  elements.target.disabled = true;
+  try {
+    const target = await api("/api/target", {
+      method: "PUT",
+      body: JSON.stringify({ id: elements.target.value }),
+    });
+    state.target = target;
+    showToast(`Céleszköz: ${target.name}`);
+    await loadState();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    elements.target.disabled = false;
   }
 }
 
@@ -263,10 +325,12 @@ document.querySelector("#empty-create").addEventListener("click", () => openDial
 document.querySelector("#close-dialog").addEventListener("click", closeDialog);
 document.querySelector("#cancel-dialog").addEventListener("click", closeDialog);
 document.querySelector("#refresh").addEventListener("click", loadState);
+elements.discover.addEventListener("click", discoverDevices);
+elements.target.addEventListener("change", selectTarget);
 elements.form.addEventListener("submit", saveSchedule);
 elements.dialog.addEventListener("click", (event) => {
   if (event.target === elements.dialog) closeDialog();
 });
 
-loadState();
+loadState().then(discoverDevices);
 window.setInterval(loadState, 15000);
