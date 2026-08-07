@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import functools
+from http import HTTPStatus
 import http.server
 import socket
 import sys
@@ -18,31 +18,96 @@ import pychromecast
 from pychromecast.const import CAST_TYPE_GROUP
 
 
-class QuietFileHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the media file without printing every range request."""
+class MediaHTTPServer(http.server.ThreadingHTTPServer):
+    """HTTP server carrying the single file and request diagnostics."""
 
-    def __init__(self, *args: object, allowed_name: str, **kwargs: object) -> None:
-        self.allowed_name = allowed_name
-        super().__init__(*args, **kwargs)
+    daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], file_path: Path) -> None:
+        self.file_path = file_path
+        self.media_requested = threading.Event()
+        super().__init__(address, MediaFileHandler)
+
+
+class MediaFileHandler(http.server.BaseHTTPRequestHandler):
+    """Serve one MP3 with CORS and HTTP byte-range support."""
 
     def _is_allowed(self) -> bool:
         requested_name = unquote(urlsplit(self.path).path).lstrip("/")
-        return requested_name == self.allowed_name
+        return requested_name == self.server.file_path.name
 
     def do_GET(self) -> None:
-        if not self._is_allowed():
-            self.send_error(http.HTTPStatus.NOT_FOUND)
-            return
-        super().do_GET()
+        self._serve_media(send_body=True)
 
     def do_HEAD(self) -> None:
+        self._serve_media(send_body=False)
+
+    def _serve_media(self, send_body: bool) -> None:
         if not self._is_allowed():
-            self.send_error(http.HTTPStatus.NOT_FOUND)
+            self.send_error(HTTPStatus.NOT_FOUND)
             return
-        super().do_HEAD()
+
+        file_path = self.server.file_path
+        file_size = file_path.stat().st_size
+        start, end = 0, file_size - 1
+        status = HTTPStatus.OK
+        range_header = self.headers.get("Range")
+
+        if range_header:
+            try:
+                unit, requested_range = range_header.strip().split("=", 1)
+                if unit != "bytes" or "," in requested_range:
+                    raise ValueError
+                first, last = requested_range.split("-", 1)
+                if first:
+                    start = int(first)
+                    end = min(int(last), end) if last else end
+                else:
+                    suffix_length = int(last)
+                    start = max(file_size - suffix_length, 0)
+                if start < 0 or start > end or start >= file_size:
+                    raise ValueError
+                status = HTTPStatus.PARTIAL_CONTENT
+            except ValueError:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+
+        content_length = end - start + 1
+        self.send_response(status)
+        self.send_header("Content-Type", "audio/mpeg")
+        self.send_header("Content-Length", str(content_length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        if status == HTTPStatus.PARTIAL_CONTENT:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self.end_headers()
+        self.server.media_requested.set()
+
+        if not send_body:
+            return
+        with file_path.open("rb") as media:
+            media.seek(start)
+            remaining = content_length
+            while remaining:
+                chunk = media.read(min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
 
     def log_message(self, format: str, *args: object) -> None:
         return
+
+    @property
+    def server(self) -> MediaHTTPServer:
+        return self.__dict__["server"]
+
+    @server.setter
+    def server(self, value: MediaHTTPServer) -> None:
+        self.__dict__["server"] = value
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -99,13 +164,8 @@ def local_ip_for(remote_host: str) -> str:
         return str(probe.getsockname()[0])
 
 
-def start_media_server(file_path: Path, port: int) -> http.server.ThreadingHTTPServer:
-    handler = functools.partial(
-        QuietFileHandler,
-        directory=str(file_path.parent),
-        allowed_name=file_path.name,
-    )
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+def start_media_server(file_path: Path, port: int) -> MediaHTTPServer:
+    server = MediaHTTPServer(("0.0.0.0", port), file_path)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
@@ -113,6 +173,10 @@ def start_media_server(file_path: Path, port: int) -> http.server.ThreadingHTTPS
 
 def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
     group.wait(timeout=10)
+    if group.status:
+        volume = round(group.status.volume_level * 100)
+        muted = " (némítva)" if group.status.volume_muted else ""
+        print(f"Csoport hangerő: {volume}%{muted}")
     advertised_ip = host_ip or local_ip_for(group.cast_info.host)
     server = start_media_server(file_path, port)
     media_url = f"http://{advertised_ip}:{server.server_port}/{quote(file_path.name)}"
@@ -130,6 +194,29 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
             stream_type="BUFFERED",
         )
         controller.block_until_active(timeout=10)
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            controller.update_status()
+            state = controller.status.player_state
+            if state == "PLAYING":
+                break
+            if state == "IDLE":
+                reason = controller.status.idle_reason or "ismeretlen receiver hiba"
+                raise RuntimeError(f"A receiver nem indította el a médiát: {reason}")
+            time.sleep(0.5)
+        else:
+            if not server.media_requested.is_set():
+                raise RuntimeError(
+                    "A hangszóró nem érte el a média URL-jét. Ellenőrizd a tűzfalat, "
+                    "vagy add meg a helyes LAN címet a --host-ip kapcsolóval."
+                )
+            raise RuntimeError(
+                f"A média letöltődött, de nem indult el (állapot: "
+                f"{controller.status.player_state})."
+            )
+
+        if not server.media_requested.is_set():
+            raise RuntimeError("A receiver PLAYING állapotot jelzett média HTTP-kérés nélkül.")
         print("Lejátszás elindult. Leállítás: Ctrl+C")
 
         while controller.status.player_state not in {"IDLE", "UNKNOWN"}:

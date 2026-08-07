@@ -43,6 +43,22 @@ A `--host-ip` akkor hasznos, ha a gépnek több hálózati interfésze van, és 
 automatikusan választott IP-cím nem érhető el a hangszórókról. A program addig
 szolgálja ki a fájlt, amíg a lejátszás fut; `Ctrl+C` leállítja a Cast sessiont.
 
+## Hibaelhárítás
+
+Ha a Google Home alkalmazás szerint a csoport castol, de nincs hang, nézd meg a
+program által kiírt hangerőt és média URL-t. A helyi gép böngészőjében nyisd meg
+ezt az URL-t. Ha több hálózati interfészed van, add meg kézzel a Wi-Fi/LAN címet:
+
+```bash
+python schoolringer.py --group "Iskola" --host-ip 192.168.1.20 --port 8080
+```
+
+A megadott IP nem lehet `127.0.0.1`; a hangszóróknak is el kell érniük. macOS-en
+engedélyezd a bejövő kapcsolatot a Python számára a tűzfal párbeszédablakában.
+Windows esetén engedélyezd a Pythont a privát hálózatokon. A program jelzi, ha a
+receiver elindult, de nem kérte le a fájlt, illetve kiírja a Cast `idle_reason`
+értékét, ha a receiver visszautasította a médiát.
+
 ## Korlátok
 
 Ez helyi hálózati POC, nem ütemező és nem felhőszolgáltatás. A speaker groupnak

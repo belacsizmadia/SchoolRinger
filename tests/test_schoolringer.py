@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import schoolringer
 
@@ -58,7 +58,17 @@ class MediaServerTests(unittest.TestCase):
         try:
             with urlopen(f"{base_url}/{media.name}") as response:
                 self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers["Access-Control-Allow-Origin"], "*")
+                self.assertEqual(response.headers["Accept-Ranges"], "bytes")
                 self.assertIn(b"MediaServerTests", response.read())
+
+            request = Request(
+                f"{base_url}/{media.name}", headers={"Range": "bytes=0-9"}
+            )
+            with urlopen(request) as response:
+                self.assertEqual(response.status, 206)
+                self.assertEqual(response.headers["Content-Length"], "10")
+                self.assertEqual(len(response.read()), 10)
             with self.assertRaises(HTTPError) as error:
                 urlopen(f"{base_url}/../schoolringer.py")
             self.assertEqual(error.exception.code, 404)
