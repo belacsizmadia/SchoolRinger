@@ -308,11 +308,28 @@ class CastRunner:
         except Exception as error:  # Keep scheduler workers alive after Cast errors.
             self.activity.add("error", f"{track}: {error}")
         finally:
-            for group in groups:
-                group.disconnect(timeout=2)
-            if browser is not None:
-                schoolringer.pychromecast.discovery.stop_discovery(browser)
-            self._play_lock.release()
+            cleanup_errors = []
+            try:
+                for group in groups:
+                    if not group.socket_client.is_alive():
+                        continue
+                    try:
+                        group.disconnect(timeout=2)
+                    except (OSError, RuntimeError, TimeoutError) as error:
+                        cleanup_errors.append(str(error))
+                if browser is not None:
+                    try:
+                        schoolringer.pychromecast.discovery.stop_discovery(browser)
+                    except (OSError, RuntimeError) as error:
+                        cleanup_errors.append(str(error))
+            finally:
+                self._play_lock.release()
+            if cleanup_errors:
+                self.activity.add(
+                    "warning",
+                    "A Cast kapcsolat lezárása nem volt teljes, de a lejátszó "
+                    "felszabadult.",
+                )
 
     @property
     def is_playing(self) -> bool:

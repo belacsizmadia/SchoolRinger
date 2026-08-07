@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import scheduler_app
 
@@ -228,6 +228,47 @@ class CastRunnerPriorityTests(unittest.TestCase):
                 any("időzített" in item["message"] for item in activity.items())
             )
             discover.assert_called_once()
+
+    @patch("scheduler_app.schoolringer.pychromecast.discovery.stop_discovery")
+    @patch("scheduler_app.schoolringer.play")
+    @patch("scheduler_app.schoolringer.discover_casts")
+    def test_cleanup_error_never_leaves_playback_locked(
+        self, discover, play, stop_discovery
+    ):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media_dir = root / "media"
+            media_dir.mkdir()
+            (media_dir / "jelzes.mp3").write_bytes(b"ID3-test")
+            store = scheduler_app.ScheduleStore(root / "schedules.json", media_dir)
+            activity = scheduler_app.ActivityLog()
+            runner = scheduler_app.CastRunner("Iskola", store, activity)
+            runner.set_target("selected", "Iskola")
+            selected = SimpleNamespace(
+                uuid="selected",
+                name="Iskola",
+                socket_client=SimpleNamespace(is_alive=lambda: True),
+                disconnect=Mock(side_effect=TimeoutError("disconnect timeout")),
+            )
+            untouched = SimpleNamespace(
+                uuid="other",
+                name="Másik",
+                socket_client=SimpleNamespace(is_alive=lambda: False),
+                disconnect=Mock(side_effect=AssertionError("must not disconnect")),
+            )
+            browser = SimpleNamespace()
+            discover.return_value = ([selected, untouched], browser)
+
+            runner.play_track("jelzes.mp3", max_duration=5)
+
+            self.assertFalse(runner.is_playing)
+            selected.disconnect.assert_called_once_with(timeout=2)
+            untouched.disconnect.assert_not_called()
+            stop_discovery.assert_called_once_with(browser)
+            self.assertTrue(
+                any("felszabadult" in item["message"] for item in activity.items())
+            )
+            play.assert_called_once()
 
 
 if __name__ == "__main__":
