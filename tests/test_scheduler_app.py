@@ -121,7 +121,9 @@ class SchedulerApiTests(unittest.TestCase):
                 cast_type=cast_type,
                 model_name=model,
                 cast_info=SimpleNamespace(host="192.168.1.10"),
-                disconnect=lambda timeout: None,
+                disconnect=lambda timeout: self.fail(
+                    "A csak felderített eszközön nem hívható disconnect"
+                ),
             )
 
         browser = SimpleNamespace()

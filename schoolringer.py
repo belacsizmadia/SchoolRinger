@@ -147,10 +147,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def discover_casts(timeout: float) -> tuple[list[Any], Any]:
     devices, browser = pychromecast.discovery.discover_chromecasts(timeout=timeout)
-    casts = [
-        pychromecast.get_chromecast_from_cast_info(device, browser.zc)
-        for device in devices
-    ]
+    casts = []
+    for device in devices:
+        try:
+            casts.append(
+                pychromecast.get_chromecast_from_cast_info(device, browser.zc)
+            )
+        except pychromecast.error.ChromecastConnectionError:
+            continue
     return sorted(casts, key=lambda cast: (cast.name or "").casefold()), browser
 
 

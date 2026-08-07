@@ -419,11 +419,14 @@ def create_app(
                 device_cache[target["id"]] = target
                 found.append(target)
             return jsonify(found)
-        except (OSError, schoolringer.pychromecast.error.PyChromecastError) as error:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            schoolringer.pychromecast.error.PyChromecastError,
+        ) as error:
             return jsonify({"error": f"Az eszközfelderítés sikertelen: {error}"}), 503
         finally:
-            for cast in casts:
-                cast.disconnect(timeout=2)
             if browser is not None:
                 schoolringer.pychromecast.discovery.stop_discovery(browser)
 
