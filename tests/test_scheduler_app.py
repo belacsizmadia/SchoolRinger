@@ -14,6 +14,7 @@ class FakeRunner:
         self.activity = activity
         self.played = []
         self.target = (None, group_name)
+        self.is_playing = False
 
     def set_target(self, target_id, target_name):
         self.target = (target_id, target_name)
@@ -23,6 +24,13 @@ class FakeRunner:
 
     def play_track_async(self, track):
         self.played.append(track)
+        self.is_playing = True
+
+    def stop(self):
+        if not self.is_playing:
+            return False
+        self.is_playing = False
+        return True
 
 
 class SchedulerApiTests(unittest.TestCase):
@@ -110,6 +118,13 @@ class SchedulerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         runner = self.app.extensions["schoolringer"]["runner"]
         self.assertEqual(runner.played, ["becsengetes.mp3"])
+        self.assertTrue(self.client.get("/api/state").get_json()["playback_active"])
+
+        response = self.client.post("/api/playback/stop")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(self.client.get("/api/state").get_json()["playback_active"])
+        self.assertEqual(self.client.post("/api/playback/stop").status_code, 409)
 
     @patch("scheduler_app.schoolringer.pychromecast.discovery.stop_discovery")
     @patch("scheduler_app.schoolringer.discover_casts")

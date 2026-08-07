@@ -202,7 +202,13 @@ def start_media_server(file_path: Path, port: int) -> MediaHTTPServer:
     return server
 
 
-def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
+def play(
+    group: Any,
+    file_path: Path,
+    host_ip: str | None,
+    port: int,
+    stop_event: threading.Event | None = None,
+) -> None:
     group.wait(timeout=10)
     if group.status:
         volume = round(group.status.volume_level * 100)
@@ -229,6 +235,9 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
         deadline = time.monotonic() + 25
         last_state: str | None = None
         while time.monotonic() < deadline:
+            if stop_event and stop_event.is_set():
+                print("Lejátszás megszakítva.")
+                return
             if monitor.load_failed.is_set():
                 error_name = MEDIA_PLAYER_ERROR_CODES.get(
                     monitor.error_code, "ISMERETLEN_HIBA"
@@ -273,6 +282,10 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
         print("Lejátszás elindult. Leállítás: Ctrl+C")
 
         while controller.status.player_state not in {"IDLE", "UNKNOWN"}:
+            if stop_event and stop_event.is_set():
+                print("Lejátszás leállítása...")
+                controller.stop()
+                return
             time.sleep(1)
             controller.update_status()
     except KeyboardInterrupt:

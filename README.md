@@ -39,7 +39,8 @@ Nyisd meg a böngészőben: [http://127.0.0.1:5000](http://127.0.0.1:5000)
 A fejlécben az automatikusan felderített speaker groupok és önálló Cast
 hangszórók közül választható céleszköz. A felületből létrehozható, szerkeszthető,
 kapcsolható és törölhető minden heti időzítés. A **Próba** művelet azonnal
-elindítja a kiválasztott MP3-at. A mentett időzítések a `data/schedules.json`, a
+elindítja a kiválasztott MP3-at; aktív lejátszáskor az eseménypanelen megjelenő
+**Leállítás** gomb megszakítja azt. A mentett időzítések a `data/schedules.json`, a
 kiválasztott céleszköz pedig a `data/settings.json` fájlba kerül. Az időzítő csak
 addig fut, amíg a `scheduler_app.py` folyamat fut.
 

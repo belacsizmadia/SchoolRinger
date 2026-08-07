@@ -13,6 +13,7 @@ const elements = {
   timezone: document.querySelector("#timezone"),
   activity: document.querySelector("#activity-list"),
   activityEmpty: document.querySelector("#activity-empty"),
+  stop: document.querySelector("#stop-playback"),
   dialog: document.querySelector("#schedule-dialog"),
   form: document.querySelector("#schedule-form"),
   formError: document.querySelector("#form-error"),
@@ -170,6 +171,7 @@ async function loadState() {
     if (!elements.dialog.open) renderFormOptions();
     renderSchedules();
     renderActivity(data.activity);
+    elements.stop.hidden = !data.playback_active;
   } catch (error) {
     showToast(error.message);
   }
@@ -310,9 +312,23 @@ async function testSchedule(id) {
   try {
     const data = await api(`/api/schedules/${id}/play`, { method: "POST" });
     showToast(data.message);
-    window.setTimeout(loadState, 700);
+    window.setTimeout(loadState, 300);
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+async function stopPlayback() {
+  elements.stop.disabled = true;
+  try {
+    const data = await api("/api/playback/stop", { method: "POST" });
+    showToast(data.message);
+    await loadState();
+  } catch (error) {
+    showToast(error.message);
+    await loadState();
+  } finally {
+    elements.stop.disabled = false;
   }
 }
 
@@ -329,6 +345,7 @@ document.querySelector("#empty-create").addEventListener("click", () => openDial
 document.querySelector("#close-dialog").addEventListener("click", closeDialog);
 document.querySelector("#cancel-dialog").addEventListener("click", closeDialog);
 document.querySelector("#refresh").addEventListener("click", loadState);
+elements.stop.addEventListener("click", stopPlayback);
 elements.discover.addEventListener("click", discoverDevices);
 elements.target.addEventListener("change", selectTarget);
 elements.form.addEventListener("submit", saveSchedule);

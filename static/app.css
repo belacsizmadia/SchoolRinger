@@ -155,6 +155,19 @@ tbody tr.is-disabled { opacity: 0.56; }
 .action-button:hover, .icon-button:hover { background: #edf5f3; }
 .action-button.danger { color: var(--danger); }
 .icon-button { width: 34px; height: 34px; border-radius: 4px; font-size: 22px; }
+.activity-actions { display: flex; align-items: center; gap: 4px; }
+.stop-button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid #e2b6b8;
+  border-radius: 4px;
+  color: var(--danger);
+  background: #fff5f5;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.stop-button:hover { border-color: var(--danger); background: #ffe8e8; }
 
 .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }

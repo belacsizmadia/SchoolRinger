@@ -216,6 +216,7 @@ class CastRunner:
         self._play_lock = threading.Lock()
         self._target_lock = threading.Lock()
         self._target_id: str | None = None
+        self._stop_event = threading.Event()
 
     def set_target(self, target_id: str | None, target_name: str | None) -> None:
         with self._target_lock:
@@ -240,6 +241,7 @@ class CastRunner:
 
         browser = None
         groups: list[Any] = []
+        self._stop_event.clear()
         self.activity.add("running", f"Indítás: {track}")
         try:
             target_id, target_name = self.target()
@@ -261,8 +263,12 @@ class CastRunner:
                 media_path,
                 host_ip=self.host_ip,
                 port=self.media_port,
+                stop_event=self._stop_event,
             )
-            self.activity.add("success", f"Lejátszás befejezve: {track}")
+            if self._stop_event.is_set():
+                self.activity.add("warning", f"Lejátszás leállítva: {track}")
+            else:
+                self.activity.add("success", f"Lejátszás befejezve: {track}")
         except Exception as error:  # Keep scheduler workers alive after Cast errors.
             self.activity.add("error", f"{track}: {error}")
         finally:
@@ -271,6 +277,17 @@ class CastRunner:
             if browser is not None:
                 schoolringer.pychromecast.discovery.stop_discovery(browser)
             self._play_lock.release()
+
+    @property
+    def is_playing(self) -> bool:
+        return self._play_lock.locked()
+
+    def stop(self) -> bool:
+        if not self.is_playing:
+            return False
+        self._stop_event.set()
+        self.activity.add("warning", "Leállítás kérve.")
+        return True
 
     def play_track_async(self, track: str) -> None:
         threading.Thread(target=self.play_track, args=(track,), daemon=True).start()
@@ -394,6 +411,7 @@ def create_app(
                 ],
                 "schedules": schedules,
                 "activity": activity.items(),
+                "playback_active": runner.is_playing,
             }
         )
 
@@ -496,6 +514,12 @@ def create_app(
             return jsonify({"error": "Az időzítés nem található."}), 404
         runner.play_track_async(schedule["track"])
         return jsonify({"message": "A próba lejátszás elindult."}), 202
+
+    @app.post("/api/playback/stop")
+    def stop_playback() -> Any:
+        if not runner.stop():
+            return jsonify({"error": "Nincs aktív lejátszás."}), 409
+        return jsonify({"message": "A leállítás elküldve."}), 202
 
     atexit.register(service.shutdown)
     return app

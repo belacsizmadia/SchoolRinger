@@ -64,7 +64,10 @@
         <aside class="activity-section" aria-labelledby="activity-title">
           <div class="section-bar">
             <h2 id="activity-title">Események</h2>
-            <button class="icon-button" id="refresh" type="button" title="Frissítés" aria-label="Frissítés">↻</button>
+            <div class="activity-actions">
+              <button class="stop-button" id="stop-playback" type="button" hidden><span aria-hidden="true">■</span> Leállítás</button>
+              <button class="icon-button" id="refresh" type="button" title="Frissítés" aria-label="Frissítés">↻</button>
+            </div>
           </div>
           <ol class="activity-list" id="activity-list"></ol>
           <p class="activity-empty" id="activity-empty">Még nincs lejátszási esemény.</p>
