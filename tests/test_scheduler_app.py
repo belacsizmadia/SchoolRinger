@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -22,8 +23,8 @@ class FakeRunner:
     def play_schedule(self, schedule_id):
         self.played.append(schedule_id)
 
-    def play_track_async(self, track):
-        self.played.append(track)
+    def play_track_async(self, track, max_duration=None):
+        self.played.append((track, max_duration))
         self.is_playing = True
 
     def stop(self):
@@ -102,6 +103,18 @@ class SchedulerApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+        response = self.client.post(
+            "/api/schedules",
+            json={
+                "time": "08:00",
+                "duration": "01:75",
+                "weekdays": [0],
+                "track": "becsengetes.mp3",
+                "enabled": True,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_manual_play_uses_selected_track(self):
         schedule = self.client.post(
             "/api/schedules",
@@ -117,7 +130,7 @@ class SchedulerApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         runner = self.app.extensions["schoolringer"]["runner"]
-        self.assertEqual(runner.played, ["becsengetes.mp3"])
+        self.assertEqual(runner.played, [("becsengetes.mp3", 30)])
         self.assertTrue(self.client.get("/api/state").get_json()["playback_active"])
 
         response = self.client.post("/api/playback/stop")
@@ -171,6 +184,43 @@ class SchedulerApiTests(unittest.TestCase):
         runner = self.app.extensions["schoolringer"]["runner"]
         self.assertEqual(runner.target, ("speaker-id", "Tanterem"))
         stop_discovery.assert_called_once_with(browser)
+
+
+class CastRunnerPriorityTests(unittest.TestCase):
+    @patch("scheduler_app.schoolringer.discover_casts", side_effect=OSError("offline"))
+    def test_scheduled_playback_stops_and_waits_for_manual_playback(self, discover):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media_dir = root / "media"
+            media_dir.mkdir()
+            (media_dir / "jelzes.mp3").write_bytes(b"ID3-test")
+            store = scheduler_app.ScheduleStore(root / "schedules.json", media_dir)
+            schedule = store.create(
+                {
+                    "time": "09:00",
+                    "duration": "00:05",
+                    "weekdays": [0],
+                    "track": "jelzes.mp3",
+                    "enabled": True,
+                }
+            )
+            activity = scheduler_app.ActivityLog()
+            runner = scheduler_app.CastRunner("Iskola", store, activity)
+            runner._play_lock.acquire()
+
+            worker = threading.Thread(
+                target=runner.play_schedule, args=(schedule["id"],), daemon=True
+            )
+            worker.start()
+            self.assertTrue(runner._stop_event.wait(timeout=1))
+            runner._play_lock.release()
+            worker.join(timeout=2)
+
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(
+                any("időzített" in item["message"] for item in activity.items())
+            )
+            discover.assert_called_once()
 
 
 if __name__ == "__main__":

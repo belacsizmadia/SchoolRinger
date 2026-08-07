@@ -129,7 +129,8 @@ td { padding: 14px; border-bottom: 1px solid #e8ebe8; vertical-align: middle; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr.is-disabled { opacity: 0.56; }
 .time-cell { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.track-name { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.track-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.duration-cell { font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .next-run { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .day-list { display: flex; gap: 3px; }
 .day-chip {
@@ -222,9 +223,9 @@ dialog form { padding: 24px; }
 .dialog-header { justify-content: space-between; margin-bottom: 24px; }
 .dialog-header h2 { font-size: 22px; }
 .eyebrow { display: block; margin-bottom: 5px; color: var(--accent); font-size: 11px; font-weight: 800; text-transform: uppercase; }
-.form-grid { display: grid; grid-template-columns: 150px 1fr; gap: 16px; }
+.form-grid { display: grid; grid-template-columns: 130px 130px minmax(0, 1fr); gap: 14px; }
 .field > span, legend { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 750; }
-input[type="time"], select {
+input[type="time"], input[type="text"], select {
   width: 100%;
   height: 42px;
   padding: 0 11px;

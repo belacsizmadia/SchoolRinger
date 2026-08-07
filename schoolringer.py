@@ -208,6 +208,7 @@ def play(
     host_ip: str | None,
     port: int,
     stop_event: threading.Event | None = None,
+    max_duration: int | None = None,
 ) -> None:
     group.wait(timeout=10)
     if group.status:
@@ -280,10 +281,15 @@ def play(
             f"({server.last_client})"
         )
         print("Lejátszás elindult. Leállítás: Ctrl+C")
+        playback_started = time.monotonic()
 
         while controller.status.player_state not in {"IDLE", "UNKNOWN"}:
             if stop_event and stop_event.is_set():
                 print("Lejátszás leállítása...")
+                controller.stop()
+                return
+            if max_duration and time.monotonic() - playback_started >= max_duration:
+                print(f"Beállított lejátszási idő lejárt ({max_duration} mp).")
                 controller.stop()
                 return
             time.sleep(1)

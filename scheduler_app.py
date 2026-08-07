@@ -33,6 +33,16 @@ WEEKDAYS = (
 )
 DAY_CODES = {day[0]: day[3] for day in WEEKDAYS}
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+DURATION_PATTERN = re.compile(r"^(\d{1,3}):([0-5]\d)$")
+
+
+def duration_seconds(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = DURATION_PATTERN.fullmatch(value)
+    if not match:
+        return None
+    return int(match.group(1)) * 60 + int(match.group(2))
 
 
 class ValidationError(ValueError):
@@ -101,6 +111,13 @@ class ScheduleStore:
         enabled = payload.get("enabled", True)
         if type(enabled) is not bool:
             raise ValidationError("Az aktív állapot csak igaz vagy hamis lehet.")
+        duration = payload.get("duration", "00:30")
+        seconds = duration_seconds(duration) if isinstance(duration, str) else None
+        if seconds is None or seconds <= 0:
+            raise ValidationError(
+                "A lejátszási idő perc:másodperc formátumú és pozitív legyen."
+            )
+        minutes, remaining_seconds = divmod(seconds, 60)
 
         return {
             "id": schedule_id or str(uuid4()),
@@ -108,6 +125,7 @@ class ScheduleStore:
             "weekdays": weekdays,
             "track": track,
             "enabled": enabled,
+            "duration": f"{minutes:02d}:{remaining_seconds:02d}",
         }
 
     def find(self, schedule_id: str) -> dict[str, Any] | None:
@@ -232,10 +250,26 @@ class CastRunner:
         if schedule is None:
             self.activity.add("error", "A lejátszási bejegyzés már nem létezik.")
             return
-        self.play_track(schedule["track"])
+        self.play_track(
+            schedule["track"],
+            max_duration=duration_seconds(schedule.get("duration")),
+            wait_for_slot=True,
+        )
 
-    def play_track(self, track: str) -> None:
-        if not self._play_lock.acquire(blocking=False):
+    def play_track(
+        self,
+        track: str,
+        *,
+        max_duration: int | None = None,
+        wait_for_slot: bool = False,
+    ) -> None:
+        if wait_for_slot and self._play_lock.locked():
+            self._stop_event.set()
+            self.activity.add(
+                "warning", "A futó próba leállítása az időzített lejátszáshoz."
+            )
+        acquired = self._play_lock.acquire(timeout=35 if wait_for_slot else 0)
+        if not acquired:
             self.activity.add("warning", f"Kihagyva, mert már szól egy zene: {track}")
             return
 
@@ -264,6 +298,7 @@ class CastRunner:
                 host_ip=self.host_ip,
                 port=self.media_port,
                 stop_event=self._stop_event,
+                max_duration=max_duration,
             )
             if self._stop_event.is_set():
                 self.activity.add("warning", f"Lejátszás leállítva: {track}")
@@ -289,8 +324,13 @@ class CastRunner:
         self.activity.add("warning", "Leállítás kérve.")
         return True
 
-    def play_track_async(self, track: str) -> None:
-        threading.Thread(target=self.play_track, args=(track,), daemon=True).start()
+    def play_track_async(self, track: str, max_duration: int | None = None) -> None:
+        threading.Thread(
+            target=self.play_track,
+            args=(track,),
+            kwargs={"max_duration": max_duration},
+            daemon=True,
+        ).start()
 
 
 class ScheduleService:
@@ -512,7 +552,9 @@ def create_app(
         schedule = store.find(schedule_id)
         if schedule is None:
             return jsonify({"error": "Az időzítés nem található."}), 404
-        runner.play_track_async(schedule["track"])
+        runner.play_track_async(
+            schedule["track"], duration_seconds(schedule.get("duration"))
+        )
         return jsonify({"message": "A próba lejátszás elindult."}), 202
 
     @app.post("/api/playback/stop")

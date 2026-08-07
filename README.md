@@ -1,8 +1,9 @@
 # SchoolRinger
 
 Helyi webes lejátszási rend Google Home speaker grouphoz. A felületen
-tetszőleges számú heti időzítés hozható létre, napokkal, óra-perccel és a
-`media` könyvtárban található MP3-fájlok egyikével.
+tetszőleges számú heti időzítés hozható létre, napokkal, óra-perccel,
+perc:másodperc formátumú lejátszási idővel és a `media` könyvtárban található
+MP3-fájlok egyikével.
 
 ## Feltételek
 

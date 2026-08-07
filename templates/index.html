@@ -47,6 +47,7 @@
                   <th>Idő</th>
                   <th>Napok</th>
                   <th>Hangfájl</th>
+                  <th>Hossz</th>
                   <th>Következő</th>
                   <th>Aktív</th>
                   <th><span class="sr-only">Műveletek</span></th>
@@ -90,6 +91,10 @@
           <label class="field">
             <span>Időpont</span>
             <input id="schedule-time" type="time" required value="08:00">
+          </label>
+          <label class="field">
+            <span>Lejátszási idő</span>
+            <input id="schedule-duration" type="text" inputmode="numeric" pattern="[0-9]{1,3}:[0-5][0-9]" required value="00:30" placeholder="PP:MM">
           </label>
           <label class="field">
             <span>MP3 hangfájl</span>

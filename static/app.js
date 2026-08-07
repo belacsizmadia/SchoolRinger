@@ -19,6 +19,7 @@ const elements = {
   formError: document.querySelector("#form-error"),
   id: document.querySelector("#schedule-id"),
   time: document.querySelector("#schedule-time"),
+  duration: document.querySelector("#schedule-duration"),
   track: document.querySelector("#schedule-track"),
   enabled: document.querySelector("#schedule-enabled"),
   dayPicker: document.querySelector("#weekday-picker"),
@@ -82,6 +83,7 @@ function renderSchedules() {
     const trackCell = createCell("track-name", schedule.track);
     trackCell.title = schedule.track;
     row.append(trackCell);
+    row.append(createCell("duration-cell", schedule.duration || "Teljes"));
     row.append(createCell("next-run", schedule.enabled ? formatNextRun(schedule.next_run) : "Kikapcsolva"));
 
     const toggleCell = createCell("");
@@ -248,6 +250,7 @@ function openDialog(schedule = null) {
   elements.id.value = schedule?.id || "";
   elements.dialogTitle.textContent = schedule ? "Időzítés szerkesztése" : "Új időzítés";
   elements.time.value = schedule?.time || "08:00";
+  elements.duration.value = schedule?.duration || "00:30";
   elements.track.value = schedule?.track || state.tracks[0] || "";
   elements.enabled.checked = schedule?.enabled ?? true;
   const selectedDays = schedule?.weekdays || [0, 1, 2, 3, 4];
@@ -266,6 +269,7 @@ async function saveSchedule(event) {
   const id = elements.id.value;
   const payload = {
     time: elements.time.value,
+    duration: elements.duration.value,
     track: elements.track.value,
     enabled: elements.enabled.checked,
     weekdays: [...elements.dayPicker.querySelectorAll("input:checked")].map((item) => Number(item.value)),
