@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SchoolRinger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <strong>SchoolRinger</strong>
+      </div>
+      <div class="target" title="Cél hangszórócsoport">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="group-name">Betöltés...</span>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-heading">
+        <div>
+          <h1>Lejátszási rend</h1>
+          <p id="schedule-summary">Időzítések betöltése...</p>
+        </div>
+        <button class="button primary" id="new-schedule" type="button">
+          <span aria-hidden="true">+</span>
+          Új időzítés
+        </button>
+      </div>
+
+      <div class="workspace">
+        <section class="schedule-section" aria-labelledby="schedule-list-title">
+          <div class="section-bar">
+            <h2 id="schedule-list-title">Heti program</h2>
+            <span class="timezone" id="timezone"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Idő</th>
+                  <th>Napok</th>
+                  <th>Hangfájl</th>
+                  <th>Következő</th>
+                  <th>Aktív</th>
+                  <th><span class="sr-only">Műveletek</span></th>
+                </tr>
+              </thead>
+              <tbody id="schedule-list"></tbody>
+            </table>
+            <div class="empty-state" id="empty-state" hidden>
+              <strong>Nincs még időzítés</strong>
+              <button class="text-button" id="empty-create" type="button">Első időzítés létrehozása</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="activity-section" aria-labelledby="activity-title">
+          <div class="section-bar">
+            <h2 id="activity-title">Események</h2>
+            <button class="icon-button" id="refresh" type="button" title="Frissítés" aria-label="Frissítés">↻</button>
+          </div>
+          <ol class="activity-list" id="activity-list"></ol>
+          <p class="activity-empty" id="activity-empty">Még nincs lejátszási esemény.</p>
+        </aside>
+      </div>
+    </main>
+
+    <dialog id="schedule-dialog">
+      <form id="schedule-form">
+        <div class="dialog-header">
+          <div>
+            <span class="eyebrow">Heti program</span>
+            <h2 id="dialog-title">Új időzítés</h2>
+          </div>
+          <button class="icon-button" id="close-dialog" type="button" title="Bezárás" aria-label="Bezárás">×</button>
+        </div>
+
+        <input id="schedule-id" type="hidden">
+        <div class="form-grid">
+          <label class="field">
+            <span>Időpont</span>
+            <input id="schedule-time" type="time" required value="08:00">
+          </label>
+          <label class="field">
+            <span>MP3 hangfájl</span>
+            <select id="schedule-track" required></select>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Lejátszási napok</legend>
+          <div class="weekday-picker" id="weekday-picker"></div>
+        </fieldset>
+
+        <label class="toggle-row">
+          <span>
+            <strong>Időzítés aktív</strong>
+            <small>Az inaktív bejegyzés nem indít lejátszást.</small>
+          </span>
+          <input id="schedule-enabled" type="checkbox" checked>
+          <span class="toggle" aria-hidden="true"></span>
+        </label>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button secondary" id="cancel-dialog" type="button">Mégse</button>
+          <button class="button primary" type="submit">Mentés</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

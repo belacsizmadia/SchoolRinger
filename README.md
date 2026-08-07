@@ -1,66 +1,83 @@
-# SchoolRinger POC
+# SchoolRinger
 
-Parancssori proof of concept, amely egy helyi `teszt.mp3` fájlt játszik le egy
-Google Home speaker groupon. A program:
-
-1. mDNS-en felderíti a helyi hálózat Cast eszközeit;
-2. csak a Google Cast group típusú célokat kínálja fel;
-3. ideiglenes HTTP-szerveren elérhetővé teszi az MP3-at;
-4. elindítja a Default Media Receiveren a lejátszást.
+Helyi webes lejátszási rend Google Home speaker grouphoz. A felületen
+tetszőleges számú heti időzítés hozható létre, napokkal, óra-perccel és a
+`media` könyvtárban található MP3-fájlok egyikével.
 
 ## Feltételek
 
 - Python 3.11 vagy újabb
 - A futtató gép és a Google Home eszközök ugyanazon a helyi hálózaton legyenek
-- A kliens tűzfala engedje az mDNS UDP 5353-at, valamint a program által kiírt
-  ideiglenes TCP portot
-- A projekt gyökerében legyen egy lejátszható `teszt.mp3`
+- A kliens tűzfala engedje az mDNS UDP 5353-at és a Python bejövő kapcsolatait
+- A Google Home alkalmazásban már létezzen a megcélzott speaker group
 
-> A GitHub Codespaces nem látja az otthoni hálózat Cast eszközeit. Ezt a POC-ot
+> A GitHub Codespaces nem látja az otthoni hálózat Cast eszközeit. Az alkalmazást
 > azon a helyi gépen kell futtatni, amely ugyanarra a Wi-Fi/LAN hálózatra
 > csatlakozik, mint a Google Home hangszórók.
 
-## Telepítés és futtatás
+## Telepítés
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+cd "$HOME/céges/github/SchoolRinger"
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+```
+
+Az MP3-fájlokat tedd a projekt `media` könyvtárába. Az új fájlok a felület
+következő frissítésekor automatikusan megjelennek a választóban.
+
+## Konfigurációs felület
+
+```bash
+source .venv/bin/activate
+python scheduler_app.py --group "Iskola"
+```
+
+Nyisd meg a böngészőben: [http://127.0.0.1:5000](http://127.0.0.1:5000)
+
+A felületből létrehozható, szerkeszthető, kapcsolható és törölhető minden heti
+időzítés. A **Próba** művelet azonnal elindítja a kiválasztott MP3-at. A mentett
+beállítások a `data/schedules.json` fájlba kerülnek. Az időzítő csak addig fut,
+amíg a `scheduler_app.py` folyamat fut.
+
+Ha a gépnek több hálózati interfésze van, add meg a hangszórók által elérhető
+LAN IP-címet és egy fix média portot:
+
+```bash
+python scheduler_app.py \
+  --group "Iskola" \
+  --cast-host-ip 192.168.1.20 \
+  --cast-media-port 8080
+```
+
+A webes felület másik porton a `--port 5001` kapcsolóval indítható. A
+`--host 0.0.0.0` beállítás a helyi hálózat más eszközeiről is elérhetővé teszi
+a konfigurációs felületet; ezt csak megbízható hálózaton használd.
+
+## Egyszeri lejátszás
+
+A korábbi parancssori POC továbbra is használható:
+
+```bash
 python schoolringer.py --list
 python schoolringer.py --group "Iskola"
+python schoolringer.py --group "Iskola" --file media/masik.mp3
 ```
-
-A `--group` elhagyásakor a program interaktívan kér csoportválasztást. További
-kapcsolók:
-
-```bash
-python schoolringer.py --help
-python schoolringer.py --group "Iskola" --file masik.mp3 --port 8080
-python schoolringer.py --group "Iskola" --host-ip 192.168.1.20
-```
-
-A `--host-ip` akkor hasznos, ha a gépnek több hálózati interfésze van, és az
-automatikusan választott IP-cím nem érhető el a hangszórókról. A program addig
-szolgálja ki a fájlt, amíg a lejátszás fut; `Ctrl+C` leállítja a Cast sessiont.
 
 ## Hibaelhárítás
 
-Ha a Google Home alkalmazás szerint a csoport castol, de nincs hang, nézd meg a
-program által kiírt hangerőt és média URL-t. A helyi gép böngészőjében nyisd meg
-ezt az URL-t. Ha több hálózati interfészed van, add meg kézzel a Wi-Fi/LAN címet:
+Ha a csoport castol, de nincs hang, ellenőrizd a program által kiírt hangerőt
+és média URL-t. A címben szereplő IP nem lehet `127.0.0.1`; a hangszóróknak is
+el kell érniük. macOS-en engedélyezd a bejövő kapcsolatot a Python számára a
+tűzfal párbeszédablakában, Windows esetén pedig a privát hálózatokon.
+
+Vendéghálózat, kliensizoláció, VLAN vagy tiltott multicast esetén az automatikus
+felderítés nem működik. A program kiírja a Cast állapotváltozásokat és a
+médialejátszó hibakódját, ha a receiver visszautasítja a fájlt.
+
+## Tesztek
 
 ```bash
-python schoolringer.py --group "Iskola" --host-ip 192.168.1.20 --port 8080
+python -m unittest discover -v
 ```
-
-A megadott IP nem lehet `127.0.0.1`; a hangszóróknak is el kell érniük. macOS-en
-engedélyezd a bejövő kapcsolatot a Python számára a tűzfal párbeszédablakában.
-Windows esetén engedélyezd a Pythont a privát hálózatokon. A program jelzi, ha a
-receiver elindult, de nem kérte le a fájlt. Az állapotváltozásokat és a Cast
-médialejátszó hibakódját is kiírja, ha a receiver visszautasította a médiát.
-
-## Korlátok
-
-Ez helyi hálózati POC, nem ütemező és nem felhőszolgáltatás. A speaker groupnak
-a Google Home alkalmazásban már léteznie kell. Vendéghálózat, kliensizoláció,
-VLAN-ok vagy tiltott multicast esetén az automatikus felderítés nem működik.

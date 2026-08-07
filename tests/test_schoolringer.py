@@ -57,7 +57,7 @@ class PlaybackMonitorTests(unittest.TestCase):
 
 class ArgumentTests(unittest.TestCase):
     def test_default_media_file(self):
-        self.assertEqual(schoolringer.parse_args([]).file, Path("teszt.mp3"))
+        self.assertEqual(schoolringer.parse_args([]).file, Path("media/teszt.mp3"))
 
 
 class MediaServerTests(unittest.TestCase):
