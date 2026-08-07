@@ -45,6 +45,16 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual([item.name for item in groups], ["Aula", "Zene"])
 
 
+class PlaybackMonitorTests(unittest.TestCase):
+    def test_captures_load_failure(self):
+        monitor = schoolringer.PlaybackMonitor()
+
+        monitor.load_media_failed(queue_item_id=1, error_code=103)
+
+        self.assertTrue(monitor.load_failed.is_set())
+        self.assertEqual(monitor.error_code, 103)
+
+
 class ArgumentTests(unittest.TestCase):
     def test_default_media_file(self):
         self.assertEqual(schoolringer.parse_args([]).file, Path("teszt.mp3"))

@@ -56,8 +56,8 @@ python schoolringer.py --group "Iskola" --host-ip 192.168.1.20 --port 8080
 A megadott IP nem lehet `127.0.0.1`; a hangszóróknak is el kell érniük. macOS-en
 engedélyezd a bejövő kapcsolatot a Python számára a tűzfal párbeszédablakában.
 Windows esetén engedélyezd a Pythont a privát hálózatokon. A program jelzi, ha a
-receiver elindult, de nem kérte le a fájlt, illetve kiírja a Cast `idle_reason`
-értékét, ha a receiver visszautasította a médiát.
+receiver elindult, de nem kérte le a fájlt. Az állapotváltozásokat és a Cast
+médialejátszó hibakódját is kiírja, ha a receiver visszautasította a médiát.
 
 ## Korlátok
 

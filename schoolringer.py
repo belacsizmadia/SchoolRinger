@@ -16,6 +16,7 @@ from urllib.parse import quote, unquote, urlsplit
 
 import pychromecast
 from pychromecast.const import CAST_TYPE_GROUP
+from pychromecast.controllers.media import MEDIA_PLAYER_ERROR_CODES
 
 
 class MediaHTTPServer(http.server.ThreadingHTTPServer):
@@ -26,6 +27,9 @@ class MediaHTTPServer(http.server.ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], file_path: Path) -> None:
         self.file_path = file_path
         self.media_requested = threading.Event()
+        self.request_count = 0
+        self.last_client: str | None = None
+        self.last_range: str | None = None
         super().__init__(address, MediaFileHandler)
 
 
@@ -85,6 +89,9 @@ class MediaFileHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
         self.end_headers()
         self.server.media_requested.set()
+        self.server.request_count += 1
+        self.server.last_client = self.client_address[0]
+        self.server.last_range = range_header
 
         if not send_body:
             return
@@ -108,6 +115,21 @@ class MediaFileHandler(http.server.BaseHTTPRequestHandler):
     @server.setter
     def server(self, value: MediaHTTPServer) -> None:
         self.__dict__["server"] = value
+
+
+class PlaybackMonitor:
+    """Capture asynchronous Cast load failures."""
+
+    def __init__(self) -> None:
+        self.load_failed = threading.Event()
+        self.error_code: int | None = None
+
+    def new_media_status(self, status: Any) -> None:
+        return
+
+    def load_media_failed(self, queue_item_id: int, error_code: int) -> None:
+        self.error_code = error_code
+        self.load_failed.set()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -186,6 +208,8 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
     print("Lejátszás indítása...")
 
     controller = group.media_controller
+    monitor = PlaybackMonitor()
+    controller.register_status_listener(monitor)
     try:
         controller.play_media(
             media_url,
@@ -193,16 +217,31 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
             title=file_path.stem,
             stream_type="BUFFERED",
         )
-        controller.block_until_active(timeout=10)
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + 25
+        last_state: str | None = None
         while time.monotonic() < deadline:
+            if monitor.load_failed.is_set():
+                error_name = MEDIA_PLAYER_ERROR_CODES.get(
+                    monitor.error_code, "ISMERETLEN_HIBA"
+                )
+                raise RuntimeError(
+                    f"A receiver visszautasította a médiát: "
+                    f"{error_name} ({monitor.error_code})"
+                )
+
             controller.update_status()
+            time.sleep(0.25)
             state = controller.status.player_state
+            if state != last_state:
+                print(f"Receiver állapot: {state}")
+                last_state = state
             if state == "PLAYING":
                 break
-            if state == "IDLE":
-                reason = controller.status.idle_reason or "ismeretlen receiver hiba"
-                raise RuntimeError(f"A receiver nem indította el a médiát: {reason}")
+            if state == "IDLE" and controller.status.idle_reason:
+                raise RuntimeError(
+                    f"A receiver nem indította el a médiát: "
+                    f"{controller.status.idle_reason}"
+                )
             time.sleep(0.5)
         else:
             if not server.media_requested.is_set():
@@ -211,12 +250,17 @@ def play(group: Any, file_path: Path, host_ip: str | None, port: int) -> None:
                     "vagy add meg a helyes LAN címet a --host-ip kapcsolóval."
                 )
             raise RuntimeError(
-                f"A média letöltődött, de nem indult el (állapot: "
-                f"{controller.status.player_state})."
+                f"A receiver elérte a fájlt ({server.request_count} HTTP-kérés, "
+                f"kliens: {server.last_client}), de 25 másodpercen belül nem "
+                f"indult el (állapot: {controller.status.player_state})."
             )
 
         if not server.media_requested.is_set():
             raise RuntimeError("A receiver PLAYING állapotot jelzett média HTTP-kérés nélkül.")
+        print(
+            f"Média elérve: {server.request_count} HTTP-kérés "
+            f"({server.last_client})"
+        )
         print("Lejátszás elindult. Leállítás: Ctrl+C")
 
         while controller.status.player_state not in {"IDLE", "UNKNOWN"}:
