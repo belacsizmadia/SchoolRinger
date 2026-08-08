@@ -1,3 +1,4 @@
+from ipaddress import IPv4Address
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -190,7 +191,7 @@ class SchedulerApiTests(unittest.TestCase):
                 name=name,
                 cast_type=cast_type,
                 model_name=model,
-                cast_info=SimpleNamespace(host="192.168.1.10"),
+                cast_info=SimpleNamespace(host=IPv4Address("192.168.1.10")),
                 disconnect=lambda timeout: self.fail(
                     "A csak felderített eszközön nem hívható disconnect"
                 ),
@@ -216,6 +217,7 @@ class SchedulerApiTests(unittest.TestCase):
                 ("Kijelző", "cast"),
             ],
         )
+        self.assertTrue(all(item["host"] == "192.168.1.10" for item in devices))
         response = self.client.put("/api/target", json={"id": "speaker-id"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["name"], "Tanterem")
@@ -226,6 +228,22 @@ class SchedulerApiTests(unittest.TestCase):
         runner = self.app.extensions["schoolringer"]["runner"]
         self.assertEqual(runner.target, ("speaker-id", "Tanterem"))
         stop_discovery.assert_called_once_with(browser)
+
+    @patch(
+        "scheduler_app.schoolringer.pychromecast.discovery.stop_discovery",
+        side_effect=RuntimeError("already stopped"),
+    )
+    @patch("scheduler_app.schoolringer.discover_casts")
+    def test_discovery_cleanup_error_does_not_replace_response(
+        self, discover, stop_discovery
+    ):
+        discover.return_value = ([], SimpleNamespace())
+
+        response = self.client.get("/api/devices?timeout=3")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), [])
+        stop_discovery.assert_called_once()
 
 
 class CastRunnerPriorityTests(unittest.TestCase):

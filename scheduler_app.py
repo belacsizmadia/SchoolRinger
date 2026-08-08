@@ -530,8 +530,8 @@ def create_app(
                     "id": str(cast.uuid),
                     "name": cast.name or "Névtelen Cast eszköz",
                     "type": target_type,
-                    "model": cast.model_name,
-                    "host": cast.cast_info.host,
+                    "model": str(cast.model_name or ""),
+                    "host": str(cast.cast_info.host),
                 }
                 device_cache[target["id"]] = target
                 found.append(target)
@@ -546,13 +546,19 @@ def create_app(
         except (
             OSError,
             RuntimeError,
+            TypeError,
             ValueError,
+            AttributeError,
             schoolringer.pychromecast.error.PyChromecastError,
         ) as error:
+            app.logger.exception("Cast eszközfelderítési hiba")
             return jsonify({"error": f"Az eszközfelderítés sikertelen: {error}"}), 503
         finally:
             if browser is not None:
-                schoolringer.pychromecast.discovery.stop_discovery(browser)
+                try:
+                    schoolringer.pychromecast.discovery.stop_discovery(browser)
+                except Exception as error:  # A lezárás ne írja felül a HTTP-választ.
+                    app.logger.warning("A Cast felderítés nem zárult le tisztán: %s", error)
 
     @app.put("/api/target")
     def update_target() -> Any:
