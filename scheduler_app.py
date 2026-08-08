@@ -639,7 +639,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--cast-host-ip", help="A hangszórók által elérhető LAN IP")
+    parser.add_argument(
+        "--cast-host-ip",
+        "--host-ip",
+        dest="cast_host_ip",
+        help="A hangszórók által elérhető LAN IP",
+    )
     parser.add_argument("--cast-media-port", type=int, default=0)
     return parser.parse_args(argv)
 

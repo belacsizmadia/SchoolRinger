@@ -268,8 +268,9 @@ def play(
         else:
             if not server.media_requested.is_set():
                 raise RuntimeError(
-                    "A hangszóró nem érte el a média URL-jét. Ellenőrizd a tűzfalat, "
-                    "vagy add meg a helyes LAN címet a --host-ip kapcsolóval."
+                    f"A hangszóró nem érte el a média URL-jét: {media_url}. "
+                    "Ellenőrizd a tűzfalat és a VM hálózati módját, vagy add meg "
+                    "a hangszórók által elérhető LAN címet a --host-ip kapcsolóval."
                 )
             raise RuntimeError(
                 f"A receiver elérte a fájlt ({server.request_count} HTTP-kérés, "

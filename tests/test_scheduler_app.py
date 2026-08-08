@@ -63,6 +63,11 @@ class SchedulerApiTests(unittest.TestCase):
             args.config, scheduler_app.BASE_DIR / "data" / "schedules.json"
         )
 
+    def test_host_ip_alias_configures_cast_media_address(self):
+        args = scheduler_app.parse_args(["--host-ip", "192.168.1.20"])
+
+        self.assertEqual(args.cast_host_ip, "192.168.1.20")
+
     def test_index_and_initial_state(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)

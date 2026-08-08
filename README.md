@@ -61,6 +61,30 @@ A webes felület másik porton a `--port 5001` kapcsolóval indítható. A
 `--host 0.0.0.0` beállítás a helyi hálózat más eszközeiről is elérhetővé teszi
 a konfigurációs felületet; ezt csak megbízható hálózaton használd.
 
+### Linux virtuális gép
+
+A VM hálózati adapterét lehetőleg **bridged** módra állítsd, hogy a VM saját,
+a hangszórókkal azonos LAN-ból kapott IP-címmel rendelkezzen. A megfelelő címet
+egy felderített hangszóró IP-címével ellenőrizheted:
+
+```bash
+ip -4 route get HANGSZÓRÓ_IP
+```
+
+A kimenet `src` utáni címét add át, és nyisd meg a média portot a VM tűzfalán:
+
+```bash
+sudo ufw allow 8080/tcp
+python scheduler_app.py \
+  --host 0.0.0.0 \
+  --host-ip VM_LAN_IP \
+  --cast-media-port 8080
+```
+
+NAT vagy host-only hálózati módban a VM címe rendszerint nem érhető el közvetlenül
+a Google Home eszközökről. Ilyenkor bridged hálózat vagy a VM-platformon beállított
+megfelelő porttovábbítás szükséges.
+
 ## Egyszeri lejátszás
 
 A korábbi parancssori POC továbbra is használható:
