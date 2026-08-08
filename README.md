@@ -18,6 +18,46 @@ könyvtárban található MP3-fájlok egyikével.
 
 ## Telepítés
 
+### Automatikus Linux telepítés
+
+Debian vagy Ubuntu `systemd`-s gépen add meg a VM hangszórók által elérhető
+LAN-címét:
+
+```bash
+chmod +x install.sh
+sudo ./install.sh \
+  --host-ip 192.168.1.20 \
+  --web-port 5000 \
+  --media-port 8080 \
+  --open-firewall
+```
+
+A telepítő létrehozza a virtuális környezetet, telepíti a Python- és
+mDNS-függőségeket, majd `schoolringer.service` néven engedélyezi az automatikus
+indulást. Ismételt futtatáskor frissíti a programot, de megtartja a mentett
+időzítéseket és a már telepített MP3-fájlokat.
+
+```bash
+sudo systemctl status schoolringer
+sudo journalctl -u schoolringer -f
+sudo systemctl restart schoolringer
+```
+
+Telepítés után a program az `/opt/schoolringer`, a módosuló adatok és MP3-ak a
+`/var/lib/schoolringer`, a hálózati beállítások pedig az
+`/etc/default/schoolringer` alatt találhatók. Beállításmódosítás után indítsd újra
+a szolgáltatást. A webes felület nem tartalmaz bejelentkezést, ezért csak
+megbízható LAN-on vagy VPN-en tedd elérhetővé.
+
+Új hangfájl telepítése után indítsd újra vagy frissítsd a weboldalt:
+
+```bash
+sudo install -o schoolringer -g schoolringer -m 0640 \
+  sajat-zene.mp3 /var/lib/schoolringer/media/
+```
+
+### Kézi telepítés
+
 ```bash
 cd "$HOME/céges/github/SchoolRinger"
 python3 -m venv .venv
