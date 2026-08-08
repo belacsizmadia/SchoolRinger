@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Sequence
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import unquote, urlsplit
 
 import pychromecast
 from pychromecast.const import CAST_TYPE_GROUP
@@ -20,6 +20,9 @@ from pychromecast.controllers.media import MEDIA_PLAYER_ERROR_CODES
 
 
 BASE_DIR = Path(__file__).resolve().parent
+MEDIA_ROUTE = "schoolringer.mp3"
+PLAYBACK_START_TIMEOUT = 25
+IDLE_GRACE_SECONDS = 3
 
 
 class MediaHTTPServer(http.server.ThreadingHTTPServer):
@@ -41,7 +44,7 @@ class MediaFileHandler(http.server.BaseHTTPRequestHandler):
 
     def _is_allowed(self) -> bool:
         requested_name = unquote(urlsplit(self.path).path).lstrip("/")
-        return requested_name == self.server.file_path.name
+        return requested_name == MEDIA_ROUTE
 
     def do_GET(self) -> None:
         self._serve_media(send_body=True)
@@ -205,6 +208,23 @@ def start_media_server(file_path: Path, port: int) -> MediaHTTPServer:
     return server
 
 
+def media_start_error(
+    server: MediaHTTPServer, media_url: str, receiver_reason: str | None = None
+) -> RuntimeError:
+    if not server.media_requested.is_set():
+        reason = f" (receiver: {receiver_reason})" if receiver_reason else ""
+        return RuntimeError(
+            f"A hangszóró nem érte el a média URL-jét: {media_url}{reason}. "
+            "Ellenőrizd a tűzfalat és a VM hálózati módját, vagy add meg "
+            "a hangszórók által elérhető LAN címet a --host-ip kapcsolóval."
+        )
+    return RuntimeError(
+        f"A receiver elérte a fájlt ({server.request_count} HTTP-kérés, "
+        f"kliens: {server.last_client}, range: {server.last_range or 'nincs'}), "
+        f"de nem indította el (állapot: {receiver_reason or 'ismeretlen'})."
+    )
+
+
 def play(
     group: Any,
     file_path: Path,
@@ -220,7 +240,10 @@ def play(
         print(f"Csoport hangerő: {volume}%{muted}")
     advertised_ip = host_ip or local_ip_for(group.cast_info.host)
     server = start_media_server(file_path, port)
-    media_url = f"http://{advertised_ip}:{server.server_port}/{quote(file_path.name)}"
+    media_url = (
+        f"http://{advertised_ip}:{server.server_port}/{MEDIA_ROUTE}"
+        f"?v={time.time_ns()}"
+    )
 
     print(f"Csoport: {group.name}")
     print(f"Média URL: {media_url}")
@@ -236,7 +259,8 @@ def play(
             title=file_path.stem,
             stream_type="BUFFERED",
         )
-        deadline = time.monotonic() + 25
+        started_at = time.monotonic()
+        deadline = started_at + PLAYBACK_START_TIMEOUT
         last_state: str | None = None
         while time.monotonic() < deadline:
             if stop_event and stop_event.is_set():
@@ -259,23 +283,21 @@ def play(
                 last_state = state
             if state == "PLAYING":
                 break
-            if state == "IDLE" and controller.status.idle_reason:
-                raise RuntimeError(
-                    f"A receiver nem indította el a médiát: "
-                    f"{controller.status.idle_reason}"
+            if (
+                state == "IDLE"
+                and controller.status.idle_reason
+                and server.media_requested.is_set()
+                and time.monotonic() - started_at >= IDLE_GRACE_SECONDS
+            ):
+                raise media_start_error(
+                    server, media_url, controller.status.idle_reason
                 )
             time.sleep(0.5)
         else:
-            if not server.media_requested.is_set():
-                raise RuntimeError(
-                    f"A hangszóró nem érte el a média URL-jét: {media_url}. "
-                    "Ellenőrizd a tűzfalat és a VM hálózati módját, vagy add meg "
-                    "a hangszórók által elérhető LAN címet a --host-ip kapcsolóval."
-                )
-            raise RuntimeError(
-                f"A receiver elérte a fájlt ({server.request_count} HTTP-kérés, "
-                f"kliens: {server.last_client}), de 25 másodpercen belül nem "
-                f"indult el (állapot: {controller.status.player_state})."
+            raise media_start_error(
+                server,
+                media_url,
+                controller.status.idle_reason or controller.status.player_state,
             )
 
         if not server.media_requested.is_set():

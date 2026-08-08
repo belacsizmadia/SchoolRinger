@@ -69,14 +69,15 @@ class MediaServerTests(unittest.TestCase):
         server = schoolringer.start_media_server(media, 0)
         base_url = f"http://127.0.0.1:{server.server_port}"
         try:
-            with urlopen(f"{base_url}/{media.name}") as response:
+            with urlopen(f"{base_url}/{schoolringer.MEDIA_ROUTE}?v=123") as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers["Access-Control-Allow-Origin"], "*")
                 self.assertEqual(response.headers["Accept-Ranges"], "bytes")
                 self.assertIn(b"MediaServerTests", response.read())
 
             request = Request(
-                f"{base_url}/{media.name}", headers={"Range": "bytes=0-9"}
+                f"{base_url}/{schoolringer.MEDIA_ROUTE}",
+                headers={"Range": "bytes=0-9"},
             )
             with urlopen(request) as response:
                 self.assertEqual(response.status, 206)
@@ -85,6 +86,26 @@ class MediaServerTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as error:
                 urlopen(f"{base_url}/../schoolringer.py")
             self.assertEqual(error.exception.code, 404)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_start_error_distinguishes_unreachable_and_rejected_media(self):
+        media = Path(__file__)
+        server = schoolringer.start_media_server(media, 0)
+        media_url = f"http://192.168.1.20:{server.server_port}/schoolringer.mp3"
+        try:
+            unreachable = schoolringer.media_start_error(server, media_url, "ERROR")
+            self.assertIn("nem érte el", str(unreachable))
+            self.assertIn(media_url, str(unreachable))
+
+            with urlopen(
+                f"http://127.0.0.1:{server.server_port}/{schoolringer.MEDIA_ROUTE}"
+            ) as response:
+                response.read()
+            rejected = schoolringer.media_start_error(server, media_url, "ERROR")
+            self.assertIn("elérte a fájlt", str(rejected))
+            self.assertIn("range:", str(rejected))
         finally:
             server.shutdown()
             server.server_close()

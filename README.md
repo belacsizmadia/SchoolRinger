@@ -142,6 +142,20 @@ Ha a csoport castol, de nincs hang, ellenőrizd a program által kiírt hangerő
 el kell érniük. macOS-en engedélyezd a bejövő kapcsolatot a Python számára a
 tűzfal párbeszédablakában, Windows esetén pedig a privát hálózatokon.
 
+Telepített Linux szolgáltatásnál frissítés után futtasd újra a telepítőt; a
+korábbi hálózati beállításokat, időzítéseket és MP3-fájlokat megtartja:
+
+```bash
+git pull
+sudo ./install.sh
+sudo journalctl -u schoolringer -f
+```
+
+Az eseménynapló megkülönbözteti, hogy a hangszóró nem érte el a kiírt URL-t,
+vagy HTTP-n letöltötte a fájlt, de nem tudta lejátszani. Az első esetben a VM
+bridged hálózata, az `/etc/default/schoolringer` `SCHOOLRINGER_HOST_IP` értéke és
+a `SCHOOLRINGER_MEDIA_PORT` tűzfalszabálya ellenőrizendő.
+
 Vendéghálózat, kliensizoláció, VLAN vagy tiltott multicast esetén az automatikus
 felderítés nem működik. A program kiírja a Cast állapotváltozásokat és a
 médialejátszó hibakódját, ha a receiver visszautasítja a fájlt.
