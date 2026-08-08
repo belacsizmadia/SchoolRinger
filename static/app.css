@@ -115,7 +115,7 @@ h2 { margin-bottom: 0; font-size: 16px; letter-spacing: 0; }
 .timezone { color: var(--muted); font-size: 12px; }
 
 .table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
 th {
   padding: 10px 14px;
   color: var(--muted);
@@ -130,6 +130,7 @@ tbody tr:last-child td { border-bottom: 0; }
 tbody tr.is-disabled { opacity: 0.56; }
 .time-cell { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .track-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.target-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
 .duration-cell { font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .next-run { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .day-list { display: flex; gap: 3px; }
@@ -224,6 +225,7 @@ dialog form { padding: 24px; }
 .dialog-header h2 { font-size: 22px; }
 .eyebrow { display: block; margin-bottom: 5px; color: var(--accent); font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .form-grid { display: grid; grid-template-columns: 130px 130px minmax(0, 1fr); gap: 14px; }
+.target-field { grid-column: 1 / -1; }
 .field > span, legend { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 750; }
 input[type="time"], input[type="text"], select {
   width: 100%;

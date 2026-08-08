@@ -2,6 +2,8 @@ const state = {
   schedules: [],
   tracks: [],
   weekdays: [],
+  devices: [],
+  formTargetFallback: null,
 };
 
 const elements = {
@@ -21,6 +23,7 @@ const elements = {
   time: document.querySelector("#schedule-time"),
   duration: document.querySelector("#schedule-duration"),
   track: document.querySelector("#schedule-track"),
+  scheduleTarget: document.querySelector("#schedule-target"),
   enabled: document.querySelector("#schedule-enabled"),
   dayPicker: document.querySelector("#weekday-picker"),
   dialogTitle: document.querySelector("#dialog-title"),
@@ -83,6 +86,10 @@ function renderSchedules() {
     const trackCell = createCell("track-name", schedule.track);
     trackCell.title = schedule.track;
     row.append(trackCell);
+    const target = schedule.effective_target;
+    const targetCell = createCell("target-name", target?.name || "Nincs beállítva");
+    targetCell.title = target?.name || "";
+    row.append(targetCell);
     row.append(createCell("duration-cell", schedule.duration || "Teljes"));
     row.append(createCell("next-run", schedule.enabled ? formatNextRun(schedule.next_run) : "Kikapcsolva"));
 
@@ -162,6 +169,42 @@ function renderFormOptions() {
     label.append(input, caption);
     elements.dayPicker.append(label);
   }
+  renderScheduleTargets(state.target);
+}
+
+function appendDeviceGroups(select, devices) {
+  for (const type of ["group", "speaker", "cast"]) {
+    const matching = devices.filter((device) => device.type === type);
+    if (!matching.length) continue;
+    const optionGroup = document.createElement("optgroup");
+    optionGroup.label = {
+      group: "Speaker groupok",
+      speaker: "Hangszórók",
+      cast: "Egyéb Cast eszközök",
+    }[type];
+    for (const device of matching) {
+      const option = new Option(device.name, device.id);
+      option.title = [device.model, device.host].filter(Boolean).join(" · ");
+      optionGroup.append(option);
+    }
+    select.append(optionGroup);
+  }
+}
+
+function renderScheduleTargets(selectedTarget = null) {
+  state.formTargetFallback = selectedTarget;
+  elements.scheduleTarget.replaceChildren();
+  appendDeviceGroups(elements.scheduleTarget, state.devices);
+  if (selectedTarget?.id && !state.devices.some((device) => device.id === selectedTarget.id)) {
+    const option = new Option(`${selectedTarget.name} (nem elérhető)`, selectedTarget.id);
+    elements.scheduleTarget.prepend(option);
+  }
+  if (!elements.scheduleTarget.options.length) {
+    const option = new Option("Előbb keress eszközöket", "");
+    option.disabled = true;
+    elements.scheduleTarget.add(option);
+  }
+  elements.scheduleTarget.value = selectedTarget?.id || "";
 }
 
 async function loadState() {
@@ -181,33 +224,22 @@ async function loadState() {
 
 async function discoverDevices() {
   const selectedId = state.target?.id || "";
+  const formTarget = state.devices.find((device) => device.id === elements.scheduleTarget.value)
+    || state.formTargetFallback;
   elements.discover.disabled = true;
   elements.target.disabled = true;
   elements.target.replaceChildren(new Option("Eszközök keresése...", ""));
   try {
     const devices = await api("/api/devices?timeout=15");
+    state.devices = devices;
     elements.target.replaceChildren();
     if (!devices.length) {
       elements.target.add(new Option("Nincs elérhető eszköz", ""));
+      renderScheduleTargets(elements.dialog.open ? formTarget : state.target);
       showToast("Nem található Cast hangszóró vagy speaker group.");
       return;
     }
-    for (const type of ["group", "speaker", "cast"]) {
-      const matching = devices.filter((device) => device.type === type);
-      if (!matching.length) continue;
-      const optionGroup = document.createElement("optgroup");
-      optionGroup.label = {
-        group: "Speaker groupok",
-        speaker: "Hangszórók",
-        cast: "Egyéb Cast eszközök",
-      }[type];
-      for (const device of matching) {
-        const option = new Option(device.name, device.id);
-        option.title = `${device.model} · ${device.host}`;
-        optionGroup.append(option);
-      }
-      elements.target.append(optionGroup);
-    }
+    appendDeviceGroups(elements.target, devices);
     const matchingCurrent = devices.find((device) => device.name === state.target?.name);
     elements.target.value = selectedId || matchingCurrent?.id || "";
     if (!elements.target.value) {
@@ -215,10 +247,13 @@ async function discoverDevices() {
       placeholder.disabled = true;
       elements.target.prepend(placeholder);
     }
+    renderScheduleTargets(elements.dialog.open ? formTarget : state.target);
   } catch (error) {
+    state.devices = [];
     elements.target.replaceChildren(
       new Option(state.target?.name || "Felderítési hiba", selectedId),
     );
+    renderScheduleTargets(elements.dialog.open ? formTarget : state.target);
     showToast(error.message);
   } finally {
     elements.discover.disabled = false;
@@ -252,6 +287,7 @@ function openDialog(schedule = null) {
   elements.time.value = schedule?.time || "08:00";
   elements.duration.value = schedule?.duration || "00:30";
   elements.track.value = schedule?.track || state.tracks[0] || "";
+  renderScheduleTargets(schedule?.target || schedule?.effective_target || state.target);
   elements.enabled.checked = schedule?.enabled ?? true;
   const selectedDays = schedule?.weekdays || [0, 1, 2, 3, 4];
   for (const input of elements.dayPicker.querySelectorAll("input")) {
@@ -267,12 +303,27 @@ function closeDialog() {
 async function saveSchedule(event) {
   event.preventDefault();
   const id = elements.id.value;
+  const selectedTarget = state.devices.find(
+    (device) => device.id === elements.scheduleTarget.value,
+  ) || (state.formTargetFallback?.id === elements.scheduleTarget.value
+    ? state.formTargetFallback
+    : null);
+  if (!selectedTarget) {
+    elements.formError.textContent = "Válassz céleszközt az időzítéshez.";
+    elements.formError.hidden = false;
+    return;
+  }
   const payload = {
     time: elements.time.value,
     duration: elements.duration.value,
     track: elements.track.value,
     enabled: elements.enabled.checked,
     weekdays: [...elements.dayPicker.querySelectorAll("input:checked")].map((item) => Number(item.value)),
+    target: {
+      id: selectedTarget.id,
+      name: selectedTarget.name,
+      type: selectedTarget.type,
+    },
   };
   try {
     await api(id ? `/api/schedules/${id}` : "/api/schedules", {

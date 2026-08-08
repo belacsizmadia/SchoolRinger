@@ -23,8 +23,8 @@ class FakeRunner:
     def play_schedule(self, schedule_id):
         self.played.append(schedule_id)
 
-    def play_track_async(self, track, max_duration=None):
-        self.played.append((track, max_duration))
+    def play_track_async(self, track, max_duration=None, target=None):
+        self.played.append((track, max_duration, target))
         self.is_playing = True
 
     def stop(self):
@@ -73,6 +73,7 @@ class SchedulerApiTests(unittest.TestCase):
         self.assertEqual(state["schedules"], [])
 
     def test_schedule_crud_and_scheduler_sync(self):
+        target = {"id": "group-id", "name": "Iskola", "type": "group"}
         response = self.client.post(
             "/api/schedules",
             json={
@@ -80,10 +81,12 @@ class SchedulerApiTests(unittest.TestCase):
                 "weekdays": [0, 2, 4],
                 "track": "becsengetes.mp3",
                 "enabled": True,
+                "target": target,
             },
         )
         self.assertEqual(response.status_code, 201)
         schedule = response.get_json()
+        self.assertEqual(schedule["target"], target)
         service = self.app.extensions["schoolringer"]["service"]
         self.assertIsNotNone(service.scheduler.get_job(schedule["id"]))
 
@@ -123,6 +126,7 @@ class SchedulerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_manual_play_uses_selected_track(self):
+        target = {"id": "speaker-id", "name": "Tanterem", "type": "speaker"}
         schedule = self.client.post(
             "/api/schedules",
             json={
@@ -130,6 +134,7 @@ class SchedulerApiTests(unittest.TestCase):
                 "weekdays": [1],
                 "track": "becsengetes.mp3",
                 "enabled": True,
+                "target": target,
             },
         ).get_json()
 
@@ -137,7 +142,7 @@ class SchedulerApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         runner = self.app.extensions["schoolringer"]["runner"]
-        self.assertEqual(runner.played, [("becsengetes.mp3", 30)])
+        self.assertEqual(runner.played, [("becsengetes.mp3", 30, target)])
         self.assertTrue(self.client.get("/api/state").get_json()["playback_active"])
 
         response = self.client.post("/api/playback/stop")
@@ -145,6 +150,36 @@ class SchedulerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertFalse(self.client.get("/api/state").get_json()["playback_active"])
         self.assertEqual(self.client.post("/api/playback/stop").status_code, 409)
+
+    def test_legacy_schedule_uses_default_target_in_state(self):
+        schedule = self.client.post(
+            "/api/schedules",
+            json={
+                "time": "10:00",
+                "weekdays": [0],
+                "track": "becsengetes.mp3",
+                "enabled": True,
+            },
+        ).get_json()
+
+        stored = self.app.extensions["schoolringer"]["store"].find(schedule["id"])
+        rendered = self.client.get("/api/state").get_json()["schedules"][0]
+
+        self.assertNotIn("target", stored)
+        self.assertEqual(rendered["effective_target"]["name"], "Iskola")
+
+    def test_rejects_invalid_schedule_target(self):
+        response = self.client.post(
+            "/api/schedules",
+            json={
+                "time": "10:00",
+                "weekdays": [0],
+                "track": "becsengetes.mp3",
+                "target": {"id": "speaker-id", "name": "Tanterem", "type": "tv"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     @patch("scheduler_app.schoolringer.pychromecast.discovery.stop_discovery")
     @patch("scheduler_app.schoolringer.discover_casts")
@@ -194,6 +229,35 @@ class SchedulerApiTests(unittest.TestCase):
 
 
 class CastRunnerPriorityTests(unittest.TestCase):
+    def test_scheduled_playback_uses_schedule_target(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media_dir = root / "media"
+            media_dir.mkdir()
+            (media_dir / "jelzes.mp3").write_bytes(b"ID3-test")
+            store = scheduler_app.ScheduleStore(root / "schedules.json", media_dir)
+            target = {"id": "speaker-id", "name": "Tanterem", "type": "speaker"}
+            schedule = store.create(
+                {
+                    "time": "09:00",
+                    "duration": "00:05",
+                    "weekdays": [0],
+                    "track": "jelzes.mp3",
+                    "enabled": True,
+                    "target": target,
+                }
+            )
+            runner = scheduler_app.CastRunner(
+                "Alapértelmezett", store, scheduler_app.ActivityLog()
+            )
+            runner.play_track = Mock()
+
+            runner.play_schedule(schedule["id"])
+
+            runner.play_track.assert_called_once_with(
+                "jelzes.mp3", max_duration=5, wait_for_slot=True, target=target
+            )
+
     @patch("scheduler_app.schoolringer.discover_casts", side_effect=OSError("offline"))
     def test_scheduled_playback_stops_and_waits_for_manual_playback(self, discover):
         with TemporaryDirectory() as temporary:
@@ -242,8 +306,8 @@ class CastRunnerPriorityTests(unittest.TestCase):
             (media_dir / "jelzes.mp3").write_bytes(b"ID3-test")
             store = scheduler_app.ScheduleStore(root / "schedules.json", media_dir)
             activity = scheduler_app.ActivityLog()
-            runner = scheduler_app.CastRunner("Iskola", store, activity)
-            runner.set_target("selected", "Iskola")
+            runner = scheduler_app.CastRunner("Alapértelmezett", store, activity)
+            runner.set_target("default", "Alapértelmezett")
             selected = SimpleNamespace(
                 uuid="selected",
                 name="Iskola",
@@ -259,7 +323,11 @@ class CastRunnerPriorityTests(unittest.TestCase):
             browser = SimpleNamespace()
             discover.return_value = ([selected, untouched], browser)
 
-            runner.play_track("jelzes.mp3", max_duration=5)
+            runner.play_track(
+                "jelzes.mp3",
+                max_duration=5,
+                target={"id": "selected", "name": "Iskola", "type": "group"},
+            )
 
             self.assertFalse(runner.is_playing)
             selected.disconnect.assert_called_once_with(timeout=2)

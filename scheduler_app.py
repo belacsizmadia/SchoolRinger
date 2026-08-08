@@ -35,6 +35,7 @@ WEEKDAYS = (
 DAY_CODES = {day[0]: day[3] for day in WEEKDAYS}
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 DURATION_PATTERN = re.compile(r"^(\d{1,3}):([0-5]\d)$")
+TARGET_TYPES = {"group", "speaker", "cast"}
 
 
 def duration_seconds(value: str | None) -> int | None:
@@ -120,7 +121,29 @@ class ScheduleStore:
             )
         minutes, remaining_seconds = divmod(seconds, 60)
 
-        return {
+        raw_target = payload.get("target")
+        target = None
+        if raw_target is not None:
+            if not isinstance(raw_target, dict):
+                raise ValidationError("Érvénytelen céleszköz.")
+            target_id = raw_target.get("id")
+            target_name = raw_target.get("name")
+            target_type = raw_target.get("type")
+            if (
+                not isinstance(target_id, str)
+                or not target_id.strip()
+                or not isinstance(target_name, str)
+                or not target_name.strip()
+                or target_type not in TARGET_TYPES
+            ):
+                raise ValidationError("Válassz egy érvényes céleszközt.")
+            target = {
+                "id": target_id,
+                "name": target_name,
+                "type": target_type,
+            }
+
+        schedule = {
             "id": schedule_id or str(uuid4()),
             "time": time_value,
             "weekdays": weekdays,
@@ -128,6 +151,9 @@ class ScheduleStore:
             "enabled": enabled,
             "duration": f"{minutes:02d}:{remaining_seconds:02d}",
         }
+        if target is not None:
+            schedule["target"] = target
+        return schedule
 
     def find(self, schedule_id: str) -> dict[str, Any] | None:
         return next(
@@ -255,6 +281,7 @@ class CastRunner:
             schedule["track"],
             max_duration=duration_seconds(schedule.get("duration")),
             wait_for_slot=True,
+            target=schedule.get("target"),
         )
 
     def play_track(
@@ -263,6 +290,7 @@ class CastRunner:
         *,
         max_duration: int | None = None,
         wait_for_slot: bool = False,
+        target: dict[str, str] | None = None,
     ) -> None:
         if wait_for_slot and self._play_lock.locked():
             self._stop_event.set()
@@ -279,7 +307,10 @@ class CastRunner:
         self._stop_event.clear()
         self.activity.add("running", f"Indítás: {track}")
         try:
-            target_id, target_name = self.target()
+            if target:
+                target_id, target_name = target.get("id"), target.get("name", "")
+            else:
+                target_id, target_name = self.target()
             if not target_id and not target_name:
                 raise RuntimeError("Nincs kiválasztva céleszköz.")
             media_path = self.store.media_dir / track
@@ -342,11 +373,16 @@ class CastRunner:
         self.activity.add("warning", "Leállítás kérve.")
         return True
 
-    def play_track_async(self, track: str, max_duration: int | None = None) -> None:
+    def play_track_async(
+        self,
+        track: str,
+        max_duration: int | None = None,
+        target: dict[str, str] | None = None,
+    ) -> None:
         threading.Thread(
             target=self.play_track,
             args=(track,),
-            kwargs={"max_duration": max_duration},
+            kwargs={"max_duration": max_duration, "target": target},
             daemon=True,
         ).start()
 
@@ -457,6 +493,7 @@ def create_app(
         )
         for schedule in schedules:
             schedule["next_run"] = next_runs.get(schedule["id"])
+            schedule["effective_target"] = schedule.get("target") or selected_target
         return jsonify(
             {
                 "group": selected_target["name"],
@@ -571,7 +608,9 @@ def create_app(
         if schedule is None:
             return jsonify({"error": "Az időzítés nem található."}), 404
         runner.play_track_async(
-            schedule["track"], duration_seconds(schedule.get("duration"))
+            schedule["track"],
+            duration_seconds(schedule.get("duration")),
+            schedule.get("target"),
         )
         return jsonify({"message": "A próba lejátszás elindult."}), 202
 
